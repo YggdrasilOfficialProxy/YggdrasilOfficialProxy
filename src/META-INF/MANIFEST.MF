@@ -1,0 +1,7 @@
+Manifest-Version: 1
+Agent-Class: cn.mcres.karlatemp.yop.YggdrasilOfficialProxy
+Premain-Class: cn.mcres.karlatemp.yop.YggdrasilOfficialProxy
+Agent-Class: cn.mcres.karlatemp.yop.YggdrasilOfficialProxy
+Implementation-Vendor: Karlatemp
+Implementation-Version: Karlatemp
+
