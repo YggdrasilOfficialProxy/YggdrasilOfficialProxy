@@ -23,17 +23,14 @@ import java.nio.charset.StandardCharsets;
 
 public class ConfigSetup {
     private static boolean initialized;
+    public static ConfigurationSection opts;
 
     public synchronized static void init(String path) throws IOException {
         if (initialized) return;
         YamlConfiguration yaml = new YamlConfiguration();
         File file = new File(path);
         if (file.isFile()) {
-            try (FileInputStream fileInputStream = new FileInputStream(path)) {
-                try (InputStreamReader reader = new InputStreamReader(fileInputStream, StandardCharsets.UTF_8)) {
-                    yaml.load(reader);
-                }
-            }
+            yaml.load(file);
         } else {
             file.getParentFile().mkdirs();
             final InputStream stream = ConfigSetup.class.getResourceAsStream("config.yml");
@@ -46,7 +43,9 @@ public class ConfigSetup {
                     }
                 }
             }
+            throw new IOException("Configuration not found. saved to " + path);
         }
+        opts = yaml.section("extension.opts").useSplitter(true);
         Metadata.yggdrasilAsURL = new URL(Metadata.yggdrasil = shorter(yaml.string("yggdrasil", Metadata.yggdrasil)));
         Metadata.LoginOfficialFirst = yaml.booleanV("official-first", false);
         Metadata.READ_TIMED_OUT = yaml.intV("timed-out.reading", Metadata.READ_TIMED_OUT);

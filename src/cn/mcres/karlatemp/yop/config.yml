@@ -1,0 +1,27 @@
+# Yggdrasil API 根地址
+yggdrasil: "https://yggdrasil.example.com/"
+# 时候先访问官方地址
+official-first: false
+# 代理端口
+port: 4321
+timed-out:
+  reading: 60000
+  connecting: 60000
+# 链接代理
+proxy:
+  official:
+    # direct 直接链接
+    # socks  Socks代理
+    # http   HTTP 代理
+    type: "direct"
+    host: "localhost"
+    port: 1080
+  yggdrasil:
+    type: "direct"
+extension:
+  # 是否为MySkin之类的插件提供缺省地址修复
+  yggdrasil-fix: true
+  opts:
+    injector:
+      path: "G:/Java/authlib-injector-1.1.26-41a7a47.jar"
+      arg: "{proxy}"

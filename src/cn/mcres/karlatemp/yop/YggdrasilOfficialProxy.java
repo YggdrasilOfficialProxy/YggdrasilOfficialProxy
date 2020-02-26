@@ -18,12 +18,18 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.lang.instrument.Instrumentation;
+import java.lang.reflect.Method;
 import java.net.URI;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.MissingResourceException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.jar.JarFile;
 
 public class YggdrasilOfficialProxy implements HttpHandler {
     public static void startup(String path, boolean formMain) throws IOException, ExecutionException, InterruptedException {
@@ -56,7 +62,11 @@ public class YggdrasilOfficialProxy implements HttpHandler {
                                 .addLast(new HttpServerCodec());
                     }
                 })
-                .group(PipelineUtils.newEventLoopGroup(10, r -> new Thread(group, r, "YggdrasilOfficialProxy-Server#" + counter.getAndIncrement())))
+                .group(PipelineUtils.newEventLoopGroup(10, r -> {
+                    Thread t = new Thread(group, r, "YggdrasilOfficialProxy-Server#" + counter.getAndIncrement());
+                    t.setDaemon(!formMain);
+                    return t;
+                }))
                 .bind(Metadata.serverPort)
                 .addListener(future -> {
                     if (!future.isSuccess()) {
@@ -75,12 +85,40 @@ public class YggdrasilOfficialProxy implements HttpHandler {
         startup(p, true);
     }
 
-    public static void agentmain(String opt, Instrumentation i) throws InterruptedException, ExecutionException, IOException {
+    public static void agentmain(String opt, Instrumentation i) throws Exception {
         startup(opt, false);
+        launch("agentmain", "Agent-Class", i);
     }
 
-    public static void premain(String opt, Instrumentation i) throws InterruptedException, ExecutionException, IOException {
+    private static void launch(String name, String mani, Instrumentation i) throws Exception {
+        String pt = ConfigSetup.opts.string("injector.path");
+        System.out.println("# Injector path: " + pt);
+        String ag = ConfigSetup.opts.string("injector.arg").replace("{proxy}", "http://localhost:" + Metadata.serverPort);
+        System.out.println("# Injector argument: " + ag);
+        if (pt != null) {
+            File f = new File(pt);
+            JarFile file = new JarFile(f);
+            final String value = file.getManifest().getMainAttributes().getValue(mani);
+            if (value == null) throw new MissingResourceException("No " + mani + " in " + pt, "", mani);
+            URLClassLoader loader = new URLClassLoader(new URL[]{f.toURI().toURL()});
+            final Class<?> target = loader.loadClass(value);
+            Method met = null;
+            try {
+                met = target.getMethod(name, String.class, Instrumentation.class);
+            } catch (NoSuchMethodException ignore) {
+            }
+            if (met == null) met = target.getMethod(name, String.class);
+            if (met.getParameterCount() == 1) {
+                met.invoke(null, ag);
+            } else {
+                met.invoke(null, ag, i);
+            }
+        }
+    }
+
+    public static void premain(String opt, Instrumentation i) throws Exception {
         startup(opt, false);
+        launch("premain", "Premain-Class", i);
     }
 
     @Override
