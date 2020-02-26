@@ -8,9 +8,8 @@
 
 package cn.mcres.karlatemp.yop;
 
-import cn.mcres.karlatemp.mxlib.config.ConfigurationSection;
-import cn.mcres.karlatemp.mxlib.config.YamlConfiguration;
-import cn.mcres.karlatemp.mxlib.tools.Toolkit;
+import cn.mcres.karlatemp.yop.config.ConfigurationSection;
+import cn.mcres.karlatemp.yop.config.YamlConfiguration;
 import cn.mcres.karlatemp.yop.server.api.user.profiles.XNames;
 import cn.mcres.karlatemp.yop.server.api.users.Minecraft;
 
@@ -19,11 +18,19 @@ import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.ServerSocket;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 public class ConfigSetup {
     private static boolean initialized;
     public static ConfigurationSection opts;
+
+    public static void writeTo(InputStream input, OutputStream out) throws IOException {
+        byte[] buf = new byte[1024];
+        do {
+            final int read = input.read(buf);
+            if (read == -1) break;
+            out.write(buf, 0, read);
+        } while (true);
+    }
 
     public synchronized static void init(String path) throws IOException {
         if (initialized) return;
@@ -32,6 +39,7 @@ public class ConfigSetup {
         if (file.isFile()) {
             yaml.load(file);
         } else {
+            //noinspection ResultOfMethodCallIgnored
             file.getParentFile().mkdirs();
             final InputStream stream = ConfigSetup.class.getResourceAsStream("config.yml");
             if (stream == null) {
@@ -39,7 +47,7 @@ public class ConfigSetup {
             } else {
                 try (InputStream target = stream) {
                     try (FileOutputStream os = new FileOutputStream(file)) {
-                        Toolkit.IO.writeTo(target, os);
+                        writeTo(target, os);
                     }
                 }
             }
@@ -58,6 +66,7 @@ public class ConfigSetup {
             new XNames().register();
         }
         PrintStream out = System.out;
+        //noinspection SynchronizationOnLocalVariableOrMethodParameter
         synchronized (out) {
             out.println("############################");
             out.println("# Yggdrasil Official Proxy #");
@@ -92,12 +101,12 @@ public class ConfigSetup {
             return p;
         } catch (Throwable ignore) {
         }
-        final int indexOf = port.indexOf("..");
+        final int indexOf = port.indexOf('~');
         if (indexOf != -1) {
             int START = 0;
             int end = 0xFFFF - 2;
             String fir = port.substring(0, indexOf);
-            String endf = port.substring(indexOf + 2);
+            String endf = port.substring(indexOf + 1);
             if (!fir.isEmpty()) {
                 START = Integer.parseInt(fir);
             }
@@ -105,7 +114,18 @@ public class ConfigSetup {
                 end = Integer.parseInt(endf);
             }
             end++;
-            return START + (int) ((end - START) * Math.random());
+            int chunk = end - START;
+            int maxTest = 500;
+            int result;
+            // START + (int) (chunk * Math.random())
+            do {
+                result = START + (int) (chunk * Math.random());
+                try (ServerSocket ignore = new ServerSocket(result)) {
+                    return result;
+                } catch (IOException ignore) {
+                }
+            } while (maxTest-- > 0);
+            return result;
         }
         return 4321;
     }

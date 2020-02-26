@@ -8,7 +8,6 @@
 
 package cn.mcres.karlatemp.yop;
 
-import cn.mcres.karlatemp.mxlib.network.PipelineUtils;
 import cn.mcres.karlatemp.yop.server.ContextHandler;
 import cn.mcres.karlatemp.yop.server.PatternContextHandler;
 import cn.mcres.karlatemp.yop.server.sessionserver.session.minecraft.HasJoined;
@@ -47,14 +46,14 @@ public class YggdrasilOfficialProxy implements HttpHandler {
                 .childOption(ChannelOption.SO_KEEPALIVE, true)
                 .childHandler(new ChannelInitializer<Channel>() {
                     @Override
-                    protected void initChannel(Channel ch) throws Exception {
+                    protected void initChannel(Channel ch) {
                         ch.pipeline()
                                 .addLast(new HttpResponseEncoder())
                                 .addLast(new HttpRequestDecoder())
                                 .addLast(new PatternContextHandler().setup(null, ch))
                                 .addLast(new ChannelInboundHandlerAdapter() {
                                     @Override
-                                    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+                                    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
                                         ctx.channel().close();
                                         cause.printStackTrace();
                                     }

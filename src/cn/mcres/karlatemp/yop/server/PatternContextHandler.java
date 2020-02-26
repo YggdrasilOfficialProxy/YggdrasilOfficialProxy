@@ -8,7 +8,6 @@
 
 package cn.mcres.karlatemp.yop.server;
 
-import cn.mcres.karlatemp.mxlib.tools.Toolkit;
 import io.netty.channel.Channel;
 import org.intellij.lang.annotations.Language;
 import org.jetbrains.annotations.NotNull;
@@ -17,6 +16,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 public class PatternContextHandler extends ContextHandler {
@@ -33,9 +33,34 @@ public class PatternContextHandler extends ContextHandler {
         register(Pattern.compile(regex), handler);
     }
 
+    public static <T, V> Map.Entry<T, V> entry(T k, V v) {
+        return new Map.Entry<T, V>() {
+            AtomicReference<V> val = new AtomicReference<>(v);
+
+            @Override
+            public T getKey() {
+                return k;
+            }
+
+            @Override
+            public V getValue() {
+                return val.get();
+            }
+
+            @Override
+            public V setValue(V value) {
+                V old;
+                do {
+                    old = val.get();
+                } while (val.compareAndSet(old, value));
+                return old;
+            }
+        };
+    }
+
     public static void register(@NotNull Pattern regex,
                                 @NotNull HttpHandler handler) {
-        handlers.add(Toolkit.entry(regex, handler));
+        handlers.add(entry(regex, handler));
     }
 
     @Override
