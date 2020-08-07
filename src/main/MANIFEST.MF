@@ -1,4 +1,0 @@
-Premain-Class:
-Can-Set-Native-Method-Prefix:
-Can-Retransform-Classes:
-Can-Redefine-Classes:
