@@ -1,9 +1,0 @@
-Manifest-Version: 1
-Agent-Class: cn.mcres.karlatemp.yop.YggdrasilOfficialProxy
-Premain-Class: cn.mcres.karlatemp.yop.YggdrasilOfficialProxy
-Main-Class: cn.mcres.karlatemp.yop.YggdrasilOfficialProxy
-Implementation-Vendor: Karlatemp
-Implementation-Version: Karlatemp
-Can-Retransform-Classes: true
-Can-Set-Native-Method-Prefix: true
-Can-Redefine-Classes: true
