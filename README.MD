@@ -1,3 +1,7 @@
+**YggdrasilOfficialProxy v1不再提供任何支持, 也不再接受任何错误反馈**
+
+
+
 # YggdrasilOfficialProxy
 
 YggdrasilOfficialProxy 采用了代理服务器的方式建立Yggdrasil服务器和
