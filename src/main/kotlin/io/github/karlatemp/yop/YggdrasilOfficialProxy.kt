@@ -10,32 +10,22 @@ package io.github.karlatemp.yop
 
 import com.google.gson.JsonArray
 import com.google.gson.JsonParser
-import io.ktor.application.call
-import io.ktor.application.install
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.ProxyBuilder
-import io.ktor.client.engine.ProxyConfig
-import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.HttpStatement
-import io.ktor.features.DefaultHeaders
-import io.ktor.features.origin
+import io.ktor.application.*
+import io.ktor.client.*
+import io.ktor.client.engine.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.features.*
 import io.ktor.http.*
-import io.ktor.http.content.OutgoingContent
-import io.ktor.request.receiveText
-import io.ktor.response.respond
-import io.ktor.response.respondText
-import io.ktor.routing.get
-import io.ktor.routing.post
-import io.ktor.routing.routing
-import io.ktor.server.engine.applicationEngineEnvironment
-import io.ktor.server.engine.connector
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
+import io.ktor.http.content.*
+import io.ktor.request.*
+import io.ktor.response.*
+import io.ktor.routing.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
 import io.ktor.util.KtorExperimentalAPI
-import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.utils.io.*
+import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -215,6 +205,10 @@ object YggdrasilOfficialProxy {
     @JvmStatic
     @JvmOverloads
     fun main(args: Array<String>? = null) {
+        if (args?.getOrNull(0) == "setup") {
+            startSetup()
+            return
+        }
         reloadConfiguration()
         val server = embeddedServer(Netty, environment = applicationEngineEnvironment {
             parentCoroutineContext = Dispatchers.Main

@@ -17,6 +17,15 @@
 
 请根据需要使用对应的版本
 
+# 向导模式
+
+下载适合的YOP版本(见下文),然后放置于服务器根目录中
+
+执行 `java -jar YggdrasilOfficialProxy-XXX.jar setup` 进入向导模式
+
+![setup.png](./setup.png)
+
+
 # Booting
 我们提供了三种启动方式, 作为 agent 加载和 作为独立服务器 加载
 

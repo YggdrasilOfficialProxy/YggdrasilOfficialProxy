@@ -16,15 +16,13 @@ plugins {
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 group = "io.github.karlatemp"
-version = "2.0.0"
+version = "2.1.0"
 
 repositories {
     mavenLocal()
     mavenCentral()
     jcenter()
-    maven {
-        url = 'https://repo.spongepowered.org/maven'
-    }
+    maven { url = 'https://repo.spongepowered.org/maven' }
     maven { url = 'https://dl.bintray.com/kotlin/ktor/' }
 }
 
@@ -41,6 +39,10 @@ dependencies {
     // compile "io.ktor:ktor-client-apache:$ktor_version"
     // https://mvnrepository.com/artifact/com.google.code.gson/gson
     compile group: 'com.google.code.gson', name: 'gson', version: '2.8.6'
+    // https://mvnrepository.com/artifact/org.jline/jline
+    compile group: 'org.jline', name: 'jline', version: '3.16.0'
+    // https://mvnrepository.com/artifact/org.fusesource.jansi/jansi
+    compile group: 'org.fusesource.jansi', name: 'jansi', version: '1.18'
 
 }
 
@@ -61,7 +63,6 @@ tasks.create("standardShadowJar", ShadowJar.class) { task ->
     )
 
     manifest {
-        // Only Proxy Edition can use -jar
         attributes([
                 'Premain-Class'               : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
                 'Main-Class'                  : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
@@ -81,17 +82,23 @@ tasks.create("shadowPaperclip", ShadowJar.class) { task ->
         }
     }
     task.from(file('build/classes/kotlin/main'))
+    task.from(file('build/resources/main'))
     task.configurations = new ArrayList<>(
             Arrays.asList(project.configurations.getByName("runtimeClasspath"))
     )
-    manifest {
+    task.exclude 'META-INF/services/org.jline.terminal.spi.JnaSupport'
+    task.exclude 'META-INF/services/org.jline.terminal.spi.JansiSupport'
+    task.manifest {
         attributes([
                 'Premain-Class'               : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
+                'Launcher-Agent-Class'        : 'io.github.karlatemp.yop.OpenLibrary',
+                'Main-Class'                  : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
                 'Can-Set-Native-Method-Prefix': 'true',
                 'Can-Retransform-Classes'     : 'true',
                 'Can-Redefine-Classes'        : 'true'
         ])
     }
+    task.dependencyFilter.exclude { it.moduleGroup == 'org.fusesource.jansi' }
     relocateMap([
             'okio'                     : 'okio',
             'okhttp3'                  : 'okhttp.okhttp3',
@@ -104,7 +111,8 @@ tasks.create("shadowPaperclip", ShadowJar.class) { task ->
             'com.typesafe'             : 'com.typesafe',
             'com.google'               : 'com.google',
             'org.slf4j'                : 'org.slf4j',
-            'io.netty'                 : 'io.netty'
+            'io.netty'                 : 'io.netty',
+            'org.jline'                : 'org.jline'
     ])
 }
 task shadowStandard(dependsOn: ['standardShadowJar'])
@@ -114,6 +122,7 @@ shadowJar {
     manifest {
         attributes([
                 'Premain-Class'               : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
+                'Main-Class'                  : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
                 'Can-Set-Native-Method-Prefix': 'true',
                 'Can-Retransform-Classes'     : 'true',
                 'Can-Redefine-Classes'        : 'true'
@@ -129,13 +138,16 @@ shadowJar {
             'com.google.guava',
             'io.netty',
             'com.google.code.gson',
-            'org.slf4j'
+            'org.slf4j',
+            'org.fusesource.jansi'
     ]
     dependencyFilter.exclude {
         if (excl.contains(it.moduleGroup))
             return true
         return false
     }
+    exclude 'META-INF/services/org.jline.terminal.spi.JnaSupport'
+    exclude 'META-INF/services/org.jline.terminal.spi.JansiSupport'
     relocateMap([
             'okio'                     : 'okio',
             'okhttp3'                  : 'okhttp.okhttp3',
@@ -145,6 +157,7 @@ shadowJar {
             'kotlinx'                  : 'kotlin.kotlinx',
             'org.checkerframework'     : 'org.checkerframework',
             'org.eclipse.jetty.alpn'   : 'org.eclipse.jetty.alpn',
-            'com.typesafe'             : 'com.typesafe'
+            'com.typesafe'             : 'com.typesafe',
+            'org.jline'                : 'org.jline'
     ])
 }
