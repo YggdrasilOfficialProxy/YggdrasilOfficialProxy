@@ -1,5 +1,6 @@
 **YggdrasilOfficialProxy v1不再提供任何支持, 也不再接受任何错误反馈**
 
+请阅读 [V2 README](https://github.com/YggdrasilOfficialProxy/YggdrasilOfficialProxy/blob/v2/README.MD)
 
 
 # YggdrasilOfficialProxy
