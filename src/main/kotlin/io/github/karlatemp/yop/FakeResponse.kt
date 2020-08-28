@@ -6,21 +6,23 @@
  * YggdrasilOfficialProxy/YggdrasilOfficialProxy.main/FakeResponse.kt
  */
 
+@file:Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
+
 package io.github.karlatemp.yop
 
-import io.ktor.client.call.HttpClientCall
-import io.ktor.client.statement.HttpResponse
-import io.ktor.http.Headers
-import io.ktor.http.HttpProtocolVersion
-import io.ktor.http.HttpStatusCode
-import io.ktor.util.date.GMTDate
-import io.ktor.utils.io.ByteReadChannel
+import io.ktor.client.call.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.util.date.*
+import io.ktor.utils.io.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 
-object NoContextResponse: HttpResponse() {
-    override val call: HttpClientCall
-        get() = TODO("Not yet implemented")
+object NoContextResponse : HttpResponse() {
+    override val call: HttpClientCall = HttpClientCall(
+            YggdrasilOfficialProxy.yggdrasilClient
+    )
+
     override val content: ByteReadChannel
         get() = ByteReadChannel.Empty
     override val coroutineContext: CoroutineContext
@@ -36,4 +38,7 @@ object NoContextResponse: HttpResponse() {
     override val version: HttpProtocolVersion
         get() = HttpProtocolVersion.HTTP_1_1
 
+    override fun toString(): String {
+        return "FakeResponse"
+    }
 }

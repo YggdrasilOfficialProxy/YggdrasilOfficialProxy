@@ -36,6 +36,7 @@ import ninja.leaping.configurate.commented.CommentedConfigurationNode
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import java.io.File
 import java.lang.instrument.Instrumentation
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.JarFile
@@ -212,6 +213,8 @@ object YggdrasilOfficialProxy {
         reloadConfiguration()
         val server = embeddedServer(Netty, environment = applicationEngineEnvironment {
             parentCoroutineContext = Dispatchers.Main
+            this.log = WrappedLogger
+            WrappedLogger.trace("Verbose enabled.")
 
             module {
                 install(DefaultHeaders)
@@ -269,19 +272,31 @@ object YggdrasilOfficialProxy {
                         val user = this.call.parameters["username"]
                         val server = this.call.parameters["serverId"]
                         val ip = this.call.parameters["ip"]
+                        WrappedLogger.trace("I - hasJoined <- user=$user, server=$server")
                         if ((user ?: server) == null) {
+                            WrappedLogger.trace("No server come.")
                             this.call.respond(HttpStatusCode.NoContent)
                             return@get
                         }
                         val future = CompletableDeferred<HttpResponse>()
                         val counter = AtomicInteger()
+                        val compiled = AtomicBoolean(false)
                         val allFailed = {
-                            if (counter.incrementAndGet() == 2) {
+                            if (counter.incrementAndGet() == 2 && !compiled.get()) {
                                 // Failed...
-                                future.complete(NoContextResponse)
+                                WrappedLogger.trace("No server compiled......")
+                                kotlin.runCatching {
+                                    future.complete(NoContextResponse)
+                                }.onFailure {
+                                    WrappedLogger.error(
+                                            msg = "Oops,, Error here",
+                                            t = it
+                                    )
+                                }
                             }
                         }
                         launch(Dispatchers.IO) {
+                            WrappedLogger.trace("Connecting to official...")
                             val response = officialClient.get<HttpResponse>(
                                     url = URLBuilder().apply {
                                         takeFrom(hasJoin)
@@ -293,10 +308,13 @@ object YggdrasilOfficialProxy {
                                     }.build()
                             )
                             if (response.status.value == 200) {
+                                compiled.set(true)
+                                WrappedLogger.trace("Official Responsed...")
                                 future.complete(response)
                             }
                         }.invokeOnCompletion { allFailed() }
                         launch(Dispatchers.IO) {
+                            WrappedLogger.trace("Connecting to Yggdrasil...")
                             val response = yggdrasilClient.get<HttpResponse>(
                                     url = URLBuilder().apply {
                                         takeFrom("$baseAPI/sessionserver/session/minecraft/hasJoined")
@@ -308,24 +326,24 @@ object YggdrasilOfficialProxy {
                                     }.build()
                             )
                             if (response.status.value == 200) {
+                                compiled.set(true)
+                                WrappedLogger.trace("Yggdrasil Responsed...")
                                 future.complete(response)
                             }
                         }.invokeOnCompletion { allFailed() }
                         val resp = future.await()
-                        if (resp.status.value == HttpStatusCode.NoContent.value) {
-                            this.call.respond(HttpStatusCode.NoContent.value)
-                        } else {
-                            this.call.respond(object : OutgoingContent.ReadChannelContent() {
-                                override fun readFrom(): ByteReadChannel {
-                                    return resp.content
-                                }
 
-                                override val status: HttpStatusCode?
-                                    get() = resp.status
-                                override val contentType: ContentType?
-                                    get() = ContentType("application", "json; charset=utf8")
-                            })
-                        }
+                        WrappedLogger.trace("You, and Me.... Finished.")
+                        this.call.respond(object : OutgoingContent.ReadChannelContent() {
+                            override fun readFrom(): ByteReadChannel {
+                                return resp.content
+                            }
+
+                            override val status: HttpStatusCode?
+                                get() = resp.status
+                            override val contentType: ContentType?
+                                get() = ContentType("application", "json; charset=utf8")
+                        })
                     }
                     get {
                         val uri = this.call.request.origin.uri
