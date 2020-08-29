@@ -24,6 +24,7 @@ import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.KtorExperimentalAPI
+import io.ktor.util.pipeline.*
 import io.ktor.utils.io.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CompletableDeferred
@@ -124,7 +125,12 @@ object YggdrasilOfficialProxy {
             val p = conf.getNode("proxy", type).parseProxy()
             return HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
                 expectSuccess = false
-                engine { proxy = p }
+                engine {
+                    proxy = p
+                    config {
+                        retryOnConnectionFailure(true)
+                    }
+                }
             }
         }
         yggdrasilClient = openClient("yggdrasil")
@@ -268,7 +274,19 @@ object YggdrasilOfficialProxy {
                         }
                         this.call.respondText(response.toString(), ContentType("application", "json; charset=utf8"), HttpStatusCode.OK)
                     }
-                    get("/sessionserver/session/minecraft/hasJoined") {
+                    @ContextDsl
+                    fun getCatching(path: String, body: PipelineInterceptor<Unit, ApplicationCall>): Route = get(path) {
+                        runCatching {
+                            body(it)
+                        }.onFailure { exception ->
+                            if (WrappedLogger.traceEnabled) {
+                                WrappedLogger.trace(null, t = exception)
+                            } else {
+                                WrappedLogger.warn("A exception in reading network.")
+                            }
+                        }
+                    }
+                    getCatching("/sessionserver/session/minecraft/hasJoined") get@{
                         val user = this.call.parameters["username"]
                         val server = this.call.parameters["serverId"]
                         val ip = this.call.parameters["ip"]
@@ -296,40 +314,46 @@ object YggdrasilOfficialProxy {
                             }
                         }
                         launch(Dispatchers.IO) {
-                            WrappedLogger.trace("Connecting to official...")
-                            val response = officialClient.get<HttpResponse>(
-                                    url = URLBuilder().apply {
-                                        takeFrom(hasJoin)
-                                        parameters.append("username", user!!)
-                                        parameters.append("serverId", server!!)
-                                        if (ip != null) {
-                                            parameters.append("ip", ip)
-                                        }
-                                    }.build()
-                            )
-                            if (response.status.value == 200) {
-                                compiled.set(true)
-                                WrappedLogger.trace("Official Responsed...")
-                                future.complete(response)
-                            }
+                            runCatching {
+                                WrappedLogger.trace("Connecting to official...")
+                                val response = officialClient.get<HttpResponse>(
+                                        url = URLBuilder().apply {
+                                            takeFrom(hasJoin)
+                                            parameters.append("username", user!!)
+                                            parameters.append("serverId", server!!)
+                                            if (ip != null) {
+                                                parameters.append("ip", ip)
+                                            }
+                                        }.build()
+                                )
+                                if (response.status.value == 200) {
+                                    compiled.set(true)
+                                    WrappedLogger.trace("Official Responsed...")
+                                    future.complete(response)
+                                }
+                            }.onFailure { WrappedLogger.trace("Official NetWork error", t = it) }
                         }.invokeOnCompletion { allFailed() }
                         launch(Dispatchers.IO) {
                             WrappedLogger.trace("Connecting to Yggdrasil...")
-                            val response = yggdrasilClient.get<HttpResponse>(
-                                    url = URLBuilder().apply {
-                                        takeFrom("$baseAPI/sessionserver/session/minecraft/hasJoined")
-                                        parameters.append("username", user!!)
-                                        parameters.append("serverId", server!!)
-                                        if (ip != null) {
-                                            parameters.append("ip", ip)
+                            runCatching {
+                                val response = yggdrasilClient.get<HttpResponse>(
+                                        url = URLBuilder().apply {
+                                            takeFrom("$baseAPI/sessionserver/session/minecraft/hasJoined")
+                                            parameters.append("username", user!!)
+                                            parameters.append("serverId", server!!)
+                                            if (ip != null) {
+                                                parameters.append("ip", ip)
+                                            }
+                                        }.build().also {
+                                            WrappedLogger.trace("Trying to connect $it")
                                         }
-                                    }.build()
-                            )
-                            if (response.status.value == 200) {
-                                compiled.set(true)
-                                WrappedLogger.trace("Yggdrasil Responsed...")
-                                future.complete(response)
-                            }
+                                )
+                                if (response.status.value == 200) {
+                                    compiled.set(true)
+                                    WrappedLogger.trace("Yggdrasil Responsed...")
+                                    future.complete(response)
+                                }
+                            }.onFailure { WrappedLogger.trace("Yggdrasil", t = it) }
                         }.invokeOnCompletion { allFailed() }
                         val resp = future.await()
 
