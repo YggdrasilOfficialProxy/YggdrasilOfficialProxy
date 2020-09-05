@@ -21,8 +21,12 @@ import java.io.File
 import java.net.ServerSocket
 import java.net.URL
 import java.net.URLClassLoader
+import java.util.*
 import java.util.jar.JarFile
+import java.util.regex.Pattern
 import java.util.zip.ZipFile
+import kotlin.collections.ArrayList
+import kotlin.collections.HashMap
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.exitProcess
@@ -30,6 +34,13 @@ import kotlin.system.exitProcess
 fun main() {
     startSetup()
 }
+
+var JANSI_MAJOR_VERSION = 0
+var JANSI_MINOR_VERSION = 0
+fun isAtLeast(major: Int, minor: Int): Boolean {
+    return JANSI_MAJOR_VERSION >= major && JANSI_MINOR_VERSION >= minor
+}
+
 
 private fun scanJAnsi(): File? {
     runCatching {
@@ -74,11 +85,11 @@ private fun scanJAnsi(): File? {
 }
 
 fun startSetup() {
-    scanJAnsi()?.let { lib ->
+    fun File.load() {
         val inst = OpenLibrary.ins
         if (inst != null) {
-            inst.appendToSystemClassLoaderSearch(JarFile(lib))
-            return@let
+            inst.appendToSystemClassLoaderSearch(JarFile(this))
+            return
         }
         val sys = ClassLoader.getSystemClassLoader()
         runCatching {
@@ -88,8 +99,8 @@ fun startSetup() {
                 runCatching {
                     w.getDeclaredMethod("appendToClassPathForInstrumentation", java.lang.String::class.java)
                             .apply { isAccessible = true }
-                            .invoke(sys, lib.path)
-                    return@let
+                            .invoke(sys, this@load.path)
+                    return
                 }
                 c = w.superclass
             }
@@ -97,12 +108,47 @@ fun startSetup() {
         runCatching {
             URLClassLoader::class.java.getDeclaredMethod("addURL", URL::class.java)
                     .apply { isAccessible = true }
-                    .invoke(sys, lib.toURI().toURL())
+                    .invoke(sys, toURI().toURL())
         }
     }
+    scanJAnsi()?.takeIf {
+        ZipFile(it).use { zip ->
+            val entry = zip.getEntry("org/fusesource/jansi/jansi.properties")
+                    ?: return@takeIf false
+            val prop = zip.getInputStream(entry).use { ver ->
+                Properties().also { prop -> ver.use { prop.load(it) } }
+            }
+            val v = prop["version"]?.toString() ?: return@takeIf false
+            val m = Pattern.compile("([0-9]+)\\.([0-9]+)([\\.-]\\S+)?").matcher(v)
+            if (m.matches()) {
+                JANSI_MAJOR_VERSION = m.group(1).toInt()
+                JANSI_MINOR_VERSION = m.group(2).toInt()
+            }
+        }
+        true
+    }?.load()
     runCatching {
         Class.forName("org.fusesource.jansi.Ansi") // Ansi loaded
-    }.onFailure { throw RuntimeException("Error: Please use proxy version or run in server direction.") }
+    }.onFailure { _ ->
+        // download
+        val file = File("cache/jansi-1.18.jar")
+        file.parentFile.mkdirs()
+        if (!file.isFile) {
+            URL("https://repo1.maven.org/maven2/org/fusesource/jansi/jansi/1.18/jansi-1.18.jar")
+                    .openStream().use { inp ->
+                        file.outputStream().use { inp.copyTo(it) }
+                    }
+        }
+        file.load()
+        runCatching {
+            Class.forName("org.fusesource.jansi.Ansi")
+        }.onFailure {
+            throw RuntimeException(
+                    "Error: Please use proxy version or run in server direction.",
+                    it.takeIf { it !is ClassNotFoundException }
+            )
+        }
+    }
     // Init terminal
     val terminal = TerminalBuilder.builder()
             .dumb(System.getProperty("yop.terminal") !== null ||
