@@ -57,6 +57,10 @@ object WrappedLogger : MarkerIgnoringBase() {
             System.getProperty("yggdrasilofficialproxy.verbose") !== null
                     || System.getenv("YGGDRASIL_OFFICIAL_PROXY_VERBOSE") !== null
 
+    fun debug(msg: () -> String) {
+        if (traceEnabled) trace(msg())
+    }
+
     override fun isTraceEnabled(): Boolean = traceEnabled
     override fun trace(msg: String?) {
         trace(msg, null)

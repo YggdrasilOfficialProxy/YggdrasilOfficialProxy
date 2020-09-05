@@ -26,7 +26,6 @@ import io.ktor.server.netty.*
 import io.ktor.util.KtorExperimentalAPI
 import io.ktor.util.pipeline.*
 import io.ktor.utils.io.*
-import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -64,7 +63,7 @@ object YggdrasilOfficialProxy {
     var officialFirst = false
     var host_C = "0.0.0.0"
     var port_C = 32217
-    var authlib by AtomicReference<kotlin.String?>()
+    var authlib by AtomicReference<String?>()
 
     @OptIn(KtorExperimentalAPI::class)
     fun reloadConfiguration() {
@@ -226,53 +225,117 @@ object YggdrasilOfficialProxy {
                 install(DefaultHeaders)
                 routing {
                     post("/api/profiles/minecraft") {
-                        val text = call.receiveText()
-                        val fromOfficial = async(Dispatchers.IO) {
-                            officialClient.post<HttpStatement>(
-                                    profilesMinecraft
-                            ) {
-                                body = text
-                            }.execute()
-                        }
-                        val fromYggdrasil = async(Dispatchers.IO) {
-                            yggdrasilClient.post<HttpResponse>(
-                                    "$baseAPI/api/profiles/minecraft"
-                            ) {
-                                body = text
+                        val query = JsonParser.parseString(call.receiveText()).asJsonArray.map { elm ->
+                            val value = elm.asString
+                            when {
+                                value.endsWith("@official") -> value.substring(0, value.length - 9) to true
+                                value.endsWith("@yggdrasil") -> value.substring(0, value.length - 10) to false
+                                else -> value to null
                             }
-                        }
-                        var r1 = fromOfficial.await()
-                        var r2 = fromYggdrasil.await()
-                        val response = JsonArray()
-                        if (!officialFirst) {
-                            val r3 = r1
-                            r1 = r2
-                            r2 = r3
-                        }
-                        if (r1.status.value == 200) {
-                            response.addAll(r1.content.toInputStream().bufferedReader().use {
-                                JsonParser.parseReader(it).asJsonArray
-                            })
-                        }
-                        if (r2.status.value == 200) {
-                            val resp = r2.content.toInputStream().bufferedReader().use {
-                                JsonParser.parseReader(it).asJsonArray
-                            }
-                            if (response.size() == 0) {
-                                response.addAll(resp)
-                            } else {
-                                val knowns = response.asSequence()
-                                        .map { it.asJsonObject.getAsJsonPrimitive("id").asString }
-                                        .toMutableSet()
-                                resp.forEach { elm ->
-                                    if (elm.asJsonObject["id"].asString !in knowns) {
-                                        knowns.add(elm.asJsonObject["id"].asString)
-                                        response.add(elm)
-                                    }
+                        }.filter(object : (Pair<String, Boolean?>) -> Boolean {
+                            val filtered = hashSetOf<String>()
+                            override fun invoke(p1: Pair<String, Boolean?>): Boolean {
+                                if (p1.first.toLowerCase() in filtered) {
+                                    return false
                                 }
+                                filtered.add(p1.first.toLowerCase())
+                                return true
+                            }
+                        })
+                        val mapping = query.asSequence().filter {
+                            it.second != null
+                        }.associate {
+                            it.first.toLowerCase() to when (it.second) {
+                                true -> "@official"
+                                false -> "@yggdrasil"
+                                else -> throw AssertionError()
                             }
                         }
-                        this.call.respondText(response.toString(), ContentType("application", "json; charset=utf8"), HttpStatusCode.OK)
+                        val sendToYggdrasil = query.mapNotNull {
+                            when (it.second) {
+                                true -> null
+                                else -> it.first
+                            }
+                        }
+                        val sendToOfficial = query.mapNotNull {
+                            when (it.second) {
+                                false -> null
+                                else -> it.first
+                            }
+                        }
+                        WrappedLogger.debug {
+                            "Query profile data:\n" +
+                                    "  -> Yggdrasil: $sendToYggdrasil\n" +
+                                    "  -> Official : $sendToOfficial"
+                        }
+                        val contentType = ContentType.parse("application/json; charset=utf-8")
+                        val fromOfficial = async {
+                            runCatching<String> {
+                                officialClient.post(profilesMinecraft) {
+                                    body = ByteArrayContent(JsonArray().also { array ->
+                                        sendToOfficial.forEach { array.add(it) }
+                                    }.toString().toByteArray(Charsets.UTF_8), contentType = contentType)
+                                }
+                            }.getOrElse {
+                                WrappedLogger.trace(null, t = it)
+                                "[]"
+                            }.let { JsonParser.parseString(it).asJsonArray }
+                        }
+                        val fromYggdrasil = async {
+                            runCatching<String> {
+                                yggdrasilClient.post(
+                                        "$baseAPI/api/profiles/minecraft"
+                                ) {
+                                    body = ByteArrayContent(JsonArray().also { array ->
+                                        sendToYggdrasil.forEach { array.add(it) }
+                                    }.toString().toByteArray(Charsets.UTF_8), contentType = contentType)
+                                }
+                            }.getOrElse {
+                                WrappedLogger.trace(null, t = it)
+                                "[]"
+                            }.let { JsonParser.parseString(it).asJsonArray }
+                        }
+                        val officialResponse = fromOfficial.await()
+                        val yggdrasilResponse = fromYggdrasil.await()
+                        val dataFirst: JsonArray
+                        val dataSecond: JsonArray
+                        if (officialFirst) {
+                            dataFirst = officialResponse
+                            dataSecond = yggdrasilResponse
+                        } else {
+                            dataFirst = yggdrasilResponse
+                            dataSecond = officialResponse
+                        }
+                        WrappedLogger.debug {
+                            "Query response: (officialFirst=$officialFirst)\n" +
+                                    "  <- Yggdrasil: $yggdrasilResponse\n" +
+                                    "  <- Official : $officialResponse"
+                        }
+                        val existed = hashSetOf<String>()
+                        val response = JsonArray()
+                        dataFirst.forEach { elm ->
+                            response.add(elm)
+                            existed.add(elm.asJsonObject["id"].asString.toLowerCase())
+                            existed.add(elm.asJsonObject["name"].asString.toLowerCase())
+                        }
+                        dataSecond.forEach { elm ->
+                            val obj = elm.asJsonObject
+                            val id = obj["id"].asString.toLowerCase()
+                            val name = obj["name"].asString.toLowerCase()
+                            if (id !in existed && name !in existed) {
+                                existed.add(id)
+                                existed.add(name)
+                                response.add(elm)
+                            }
+                        }
+                        response.forEach { resp ->
+                            resp.asJsonObject.let {
+                                it.addProperty("name", it["name"].asString.let { old ->
+                                    old + (mapping[old.toLowerCase()] ?: "")
+                                })
+                            }
+                        }
+                        this.call.respondText(response.toString(), ContentType("application", "json"), HttpStatusCode.OK)
                     }
                     @ContextDsl
                     fun getCatching(path: String, body: PipelineInterceptor<Unit, ApplicationCall>): Route = get(path) {
