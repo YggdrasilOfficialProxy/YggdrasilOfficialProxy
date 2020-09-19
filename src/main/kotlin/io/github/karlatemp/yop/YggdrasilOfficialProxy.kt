@@ -88,7 +88,7 @@ object YggdrasilOfficialProxy {
             output.println("# Oops.")
             output.println(when {
                 conf == null && file.isFile -> "# Your Configuration of YggdrasilOfficialProxy looks like broken. We will fix it."
-                edited -> {
+                !edited -> {
                     output.println(
                             "# You look like started YggdrasilOfficialProxy before"
                     )
@@ -271,6 +271,7 @@ object YggdrasilOfficialProxy {
                         val contentType = ContentType.parse("application/json; charset=utf-8")
                         val fromOfficial = async {
                             runCatching<String> {
+                                if (sendToOfficial.isEmpty()) return@async JsonArray()
                                 officialClient.post(profilesMinecraft) {
                                     body = ByteArrayContent(JsonArray().also { array ->
                                         sendToOfficial.forEach { array.add(it) }
@@ -283,6 +284,7 @@ object YggdrasilOfficialProxy {
                         }
                         val fromYggdrasil = async {
                             runCatching<String> {
+                                if (sendToYggdrasil.isEmpty()) return@async JsonArray()
                                 yggdrasilClient.post(
                                         "$baseAPI/api/profiles/minecraft"
                                 ) {
