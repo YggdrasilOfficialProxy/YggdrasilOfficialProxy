@@ -34,22 +34,26 @@ object WrappedLogger : MarkerIgnoringBase() {
         if (traceEnabled) {
             output.println("[YggdrasilOfficialProxy] [TRACE] $msg")
             t?.printStackTrace(output)
+            output.flush()
         }
     }
 
     override fun info(msg: String?, t: Throwable?) {
         output.println("[YggdrasilOfficialProxy] [ INFO] $msg")
         t?.printStackTrace(output)
+        output.flush()
     }
 
     override fun warn(msg: String?, t: Throwable?) {
         output.println("[YggdrasilOfficialProxy] [ WARN] $msg")
         t?.printStackTrace(output)
+        output.flush()
     }
 
     override fun error(msg: String?, t: Throwable?) {
         output.println("[YggdrasilOfficialProxy] [ERROR] $msg")
         t?.printStackTrace(output)
+        output.flush()
     }
 
     @JvmField

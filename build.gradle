@@ -8,7 +8,7 @@
 
 plugins {
     id 'java'
-    id 'org.jetbrains.kotlin.jvm' version '1.4.0'
+    id 'org.jetbrains.kotlin.jvm' version '1.4.10'
     id 'com.github.johnrengelman.shadow' version '6.0.0'
 }
 
@@ -16,7 +16,7 @@ plugins {
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 group = "io.github.karlatemp"
-version = "2.1.3"
+version = "2.2.0"
 
 repositories {
     mavenLocal()
@@ -28,10 +28,11 @@ repositories {
 
 dependencies {
     compile 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
+    compile 'org.jetbrains.kotlin:kotlin-reflect'
     compile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.4'
     compile 'org.spongepowered:configurate-hocon:3.6.1'
 
-    def ktor_version = "1.3.2"
+    def ktor_version = "1.4.0"
     compile "io.ktor:ktor-websockets:$ktor_version"
     compile "io.ktor:ktor-server-netty:$ktor_version"
     compile "io.ktor:ktor-http-jvm:$ktor_version"
@@ -48,7 +49,7 @@ dependencies {
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
     kotlinOptions {
-        jvmTarget = '1.6'
+        jvmTarget = '1.8'
         freeCompilerArgs += '-Xopt-in=kotlin.RequiresOptIn'
     }
 }
@@ -98,14 +99,18 @@ tasks.create("shadowPaperclip", ShadowJar.class) { task ->
                 'Can-Redefine-Classes'        : 'true'
         ])
     }
-    task.dependencyFilter.exclude { it.moduleGroup == 'org.fusesource.jansi' }
+    task.dependencyFilter.exclude {
+        println(it)
+        it.moduleGroup == 'org.fusesource.jansi'
+    }
     relocateMap([
             'okio'                     : 'okio',
             'okhttp3'                  : 'okhttp.okhttp3',
             'ninja.leaping.configurate': 'org.spongepowered.ninja.leaping.configurate',
-            'io.ktor'                  : 'io.ktor',
-            'kotlin'                   : 'kotlin',
-            'kotlinx'                  : 'kotlin',
+            // kotlin.reflect.jvm.internal.KotlinReflectionInternalError: Unresolved class: class java.lang.String
+            //'io.ktor'                  : 'io.ktor',
+            //'kotlin'                   : 'kotlin',
+            //'kotlinx'                  : 'kotlin',
             'org.checkerframework'     : 'org.checkerframework',
             'org.eclipse.jetty.alpn'   : 'org.eclipse.jetty.alpn',
             'com.typesafe'             : 'com.typesafe',
@@ -153,8 +158,9 @@ shadowJar {
             'okhttp3'                  : 'okhttp.okhttp3',
             'ninja.leaping.configurate': 'org.spongepowered.ninja.leaping.configurate',
             'io.ktor'                  : 'io.ktor',
-            'kotlin'                   : 'kotlin.kotlin',
-            'kotlinx'                  : 'kotlin.kotlinx',
+            // kotlin.reflect.jvm.internal.KotlinReflectionInternalError: Unresolved class: class java.lang.String
+            // 'kotlin'                   : 'kotlin.kotlin',
+            // 'kotlinx'                  : 'kotlin.kotlinx',
             'org.checkerframework'     : 'org.checkerframework',
             'org.eclipse.jetty.alpn'   : 'org.eclipse.jetty.alpn',
             'com.typesafe'             : 'com.typesafe',

@@ -271,8 +271,8 @@ object YggdrasilOfficialProxy {
                         val contentType = ContentType.parse("application/json; charset=utf-8")
                         val fromOfficial = async {
                             runCatching<String> {
-                                if (sendToOfficial.isEmpty()) return@async JsonArray()
-                                officialClient.post(profilesMinecraft) {
+                                if (sendToOfficial.isEmpty()) "[]"
+                                else officialClient.post(profilesMinecraft) {
                                     body = ByteArrayContent(JsonArray().also { array ->
                                         sendToOfficial.forEach { array.add(it) }
                                     }.toString().toByteArray(Charsets.UTF_8), contentType = contentType)
@@ -284,8 +284,8 @@ object YggdrasilOfficialProxy {
                         }
                         val fromYggdrasil = async {
                             runCatching<String> {
-                                if (sendToYggdrasil.isEmpty()) return@async JsonArray()
-                                yggdrasilClient.post(
+                                if (sendToYggdrasil.isEmpty()) "[]"
+                                else yggdrasilClient.post(
                                         "$baseAPI/api/profiles/minecraft"
                                 ) {
                                     body = ByteArrayContent(JsonArray().also { array ->
@@ -436,6 +436,7 @@ object YggdrasilOfficialProxy {
                     }
                     get {
                         val uri = this.call.request.origin.uri
+                        WrappedLogger.trace("DRX: $uri")
                         val resp: HttpResponse = yggdrasilClient.get("$baseAPI$uri")
                         this.call.respond(object : OutgoingContent.ReadChannelContent() {
                             override fun readFrom(): ByteReadChannel {
