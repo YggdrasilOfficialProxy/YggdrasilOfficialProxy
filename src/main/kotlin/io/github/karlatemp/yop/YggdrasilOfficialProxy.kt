@@ -26,18 +26,14 @@ import io.ktor.server.netty.*
 import io.ktor.util.KtorExperimentalAPI
 import io.ktor.util.pipeline.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import ninja.leaping.configurate.ConfigurationNode
 import ninja.leaping.configurate.ConfigurationOptions
 import ninja.leaping.configurate.commented.CommentedConfigurationNode
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import java.io.File
 import java.lang.instrument.Instrumentation
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.JarFile
 import kotlin.system.exitProcess
@@ -361,24 +357,7 @@ object YggdrasilOfficialProxy {
                             this.call.respond(HttpStatusCode.NoContent)
                             return@get
                         }
-                        val future = CompletableDeferred<HttpResponse>()
-                        val counter = AtomicInteger()
-                        val compiled = AtomicBoolean(false)
-                        val allFailed = {
-                            if (counter.incrementAndGet() == 2 && !compiled.get()) {
-                                // Failed...
-                                WrappedLogger.trace("No server compiled......")
-                                kotlin.runCatching {
-                                    future.complete(NoContextResponse)
-                                }.onFailure {
-                                    WrappedLogger.error(
-                                            msg = "Oops,, Error here",
-                                            t = it
-                                    )
-                                }
-                            }
-                        }
-                        launch(Dispatchers.IO) {
+                        val officialDeferred = async(Dispatchers.IO) {
                             runCatching {
                                 WrappedLogger.trace("Connecting to official...")
                                 val response = officialClient.get<HttpResponse>(
@@ -392,13 +371,13 @@ object YggdrasilOfficialProxy {
                                         }.build()
                                 )
                                 if (response.status.value == 200) {
-                                    compiled.set(true)
                                     WrappedLogger.trace("Official Responsed...")
-                                    future.complete(response)
+                                    return@async response
                                 }
                             }.onFailure { WrappedLogger.trace("Official NetWork error", t = it) }
-                        }.invokeOnCompletion { allFailed() }
-                        launch(Dispatchers.IO) {
+                            return@async null
+                        }
+                        val yggdrasilDeferred = async(Dispatchers.IO) {
                             WrappedLogger.trace("Connecting to Yggdrasil...")
                             runCatching {
                                 val response = yggdrasilClient.get<HttpResponse>(
@@ -414,13 +393,22 @@ object YggdrasilOfficialProxy {
                                         }
                                 )
                                 if (response.status.value == 200) {
-                                    compiled.set(true)
                                     WrappedLogger.trace("Yggdrasil Responsed...")
-                                    future.complete(response)
+                                    return@async response
                                 }
                             }.onFailure { WrappedLogger.trace("Yggdrasil", t = it) }
-                        }.invokeOnCompletion { allFailed() }
-                        val resp = future.await()
+                            return@async null
+                        }
+                        val officialResponse = officialDeferred.await()
+                        val yggdrasilResponse = yggdrasilDeferred.await()
+                        val resp = if (officialResponse ?: yggdrasilResponse == null || (officialResponse != null && yggdrasilResponse != null))
+                        {
+                            // Failed...
+                            WrappedLogger.trace("No server compiled......")
+                            NoContextResponse
+                        } else {
+                            officialResponse ?: yggdrasilResponse!!
+                        }
 
                         WrappedLogger.trace("You, and Me.... Finished.")
                         this.call.respond(object : OutgoingContent.ReadChannelContent() {
@@ -428,9 +416,9 @@ object YggdrasilOfficialProxy {
                                 return resp.content
                             }
 
-                            override val status: HttpStatusCode?
+                            override val status: HttpStatusCode
                                 get() = resp.status
-                            override val contentType: ContentType?
+                            override val contentType: ContentType
                                 get() = ContentType("application", "json; charset=utf8")
                         })
                     }
@@ -443,7 +431,7 @@ object YggdrasilOfficialProxy {
                                 return resp.content
                             }
 
-                            override val status: HttpStatusCode?
+                            override val status: HttpStatusCode
                                 get() = resp.status
                             override val contentType: ContentType?
                                 get() = resp.contentType()
