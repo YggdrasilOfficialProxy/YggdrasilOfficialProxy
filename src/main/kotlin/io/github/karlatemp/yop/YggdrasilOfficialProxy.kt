@@ -181,6 +181,12 @@ object YggdrasilOfficialProxy {
                         getNode("official").setCV(
                                 "The proxy of official connecting",
                                 createEmptyNode().apply {
+                                    getNode("type").value = "direct"
+                                }
+                        )
+                        getNode("just-example-for-socks").setCV(
+                                "Example for socks proxy",
+                                createEmptyNode().apply {
                                     getNode("type").value = "socks"
                                     getNode("host").value = "localhost"
                                     getNode("port").value = 1080
