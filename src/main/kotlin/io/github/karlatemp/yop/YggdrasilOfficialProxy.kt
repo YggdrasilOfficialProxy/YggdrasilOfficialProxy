@@ -118,6 +118,9 @@ object YggdrasilOfficialProxy {
 
         fun openClient(type: String): HttpClient {
             val p = conf.getNode("proxy", type).parseProxy()
+            WrappedLogger.debug {
+                "Proxy: $type, $p"
+            }
             return HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
                 expectSuccess = false
                 engine {
@@ -353,12 +356,25 @@ object YggdrasilOfficialProxy {
                             }
                         }
                     }
+
+                    @ContextDsl
+                    fun getCatching(body: PipelineInterceptor<Unit, ApplicationCall>): Route = get {
+                        runCatching {
+                            body(it)
+                        }.onFailure { exception ->
+                            if (WrappedLogger.traceEnabled) {
+                                WrappedLogger.trace(null, t = exception)
+                            } else {
+                                WrappedLogger.warn("A exception in reading network.")
+                            }
+                        }
+                    }
                     getCatching("/sessionserver/session/minecraft/hasJoined") get@{
                         val user = this.call.parameters["username"]
                         val server = this.call.parameters["serverId"]
                         val ip = this.call.parameters["ip"]
                         WrappedLogger.trace("I - hasJoined <- user=$user, server=$server")
-                        if ((user ?: server) == null) {
+                        if (user == null || server == null) {
                             WrappedLogger.trace("No server come.")
                             this.call.respond(HttpStatusCode.NoContent)
                             return@get
@@ -369,8 +385,8 @@ object YggdrasilOfficialProxy {
                                 val response = officialClient.get<HttpResponse>(
                                         url = URLBuilder().apply {
                                             takeFrom(hasJoin)
-                                            parameters.append("username", user!!)
-                                            parameters.append("serverId", server!!)
+                                            parameters.append("username", user)
+                                            parameters.append("serverId", server)
                                             if (ip != null) {
                                                 parameters.append("ip", ip)
                                             }
@@ -389,8 +405,8 @@ object YggdrasilOfficialProxy {
                                 val response = yggdrasilClient.get<HttpResponse>(
                                         url = URLBuilder().apply {
                                             takeFrom("$baseAPI/sessionserver/session/minecraft/hasJoined")
-                                            parameters.append("username", user!!)
-                                            parameters.append("serverId", server!!)
+                                            parameters.append("username", user)
+                                            parameters.append("serverId", server)
                                             if (ip != null) {
                                                 parameters.append("ip", ip)
                                             }
@@ -407,19 +423,19 @@ object YggdrasilOfficialProxy {
                         }
                         val officialResponse = officialDeferred.await()
                         val yggdrasilResponse = yggdrasilDeferred.await()
-                        val resp = if (officialResponse ?: yggdrasilResponse == null || (officialResponse != null && yggdrasilResponse != null))
-                        {
+                        val resp = if (officialResponse ?: yggdrasilResponse == null || (officialResponse != null && yggdrasilResponse != null)) {
                             // Failed...
                             WrappedLogger.trace("No server compiled......")
                             NoContextResponse
                         } else {
                             officialResponse ?: yggdrasilResponse!!
                         }
+                        val resp0 = patch(resp, resp === officialResponse)
 
                         WrappedLogger.trace("You, and Me.... Finished.")
-                        this.call.respond(object : OutgoingContent.ReadChannelContent() {
-                            override fun readFrom(): ByteReadChannel {
-                                return resp.content
+                        this.call.respond(object : OutgoingContent.ByteArrayContent() {
+                            override fun bytes(): ByteArray {
+                                return resp0
                             }
 
                             override val status: HttpStatusCode
@@ -428,7 +444,7 @@ object YggdrasilOfficialProxy {
                                 get() = ContentType("application", "json; charset=utf8")
                         })
                     }
-                    get {
+                    getCatching {
                         val uri = this.call.request.origin.uri
                         WrappedLogger.trace("DRX: $uri")
                         val resp: HttpResponse = yggdrasilClient.get("$baseAPI$uri")
