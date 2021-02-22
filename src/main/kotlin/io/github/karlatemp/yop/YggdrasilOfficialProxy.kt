@@ -13,6 +13,7 @@ import com.google.gson.JsonParser
 import io.ktor.application.*
 import io.ktor.client.*
 import io.ktor.client.engine.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.features.*
@@ -34,6 +35,8 @@ import ninja.leaping.configurate.commented.CommentedConfigurationNode
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import java.io.File
 import java.lang.instrument.Instrumentation
+import java.net.Authenticator
+import java.net.PasswordAuthentication
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.JarFile
 import kotlin.system.exitProcess
@@ -105,6 +108,16 @@ object YggdrasilOfficialProxy {
             exitProcess(-4849)
         }
         fun ConfigurationNode.parseProxy(): ProxyConfig? {
+            val authUsername = getNode("username").string
+            val authPassword = getNode("password").string
+            if (!authUsername.isNullOrBlank() && !authPassword.isNullOrBlank())
+            {
+                Authenticator.setDefault(
+                    object : Authenticator() {
+                        override fun getPasswordAuthentication() = PasswordAuthentication(authUsername, authPassword.toCharArray())
+                    }
+                )
+            }
             return when (getNode("type").getString("direct")) {
                 "http" -> {
                     ProxyBuilder.http(Url(getNode("url").string ?: error("Missing url")))
@@ -121,7 +134,7 @@ object YggdrasilOfficialProxy {
             WrappedLogger.debug {
                 "Proxy: $type, $p"
             }
-            return HttpClient(io.ktor.client.engine.okhttp.OkHttp) {
+            return HttpClient(OkHttp) {
                 expectSuccess = false
                 engine {
                     proxy = p
@@ -193,6 +206,16 @@ object YggdrasilOfficialProxy {
                                     getNode("type").value = "socks"
                                     getNode("host").value = "localhost"
                                     getNode("port").value = 1080
+                                }
+                        )
+                        getNode("just-example-for-socks-with-authentication").setCV(
+                                "Example for socks proxy with authentication",
+                                createEmptyNode().apply {
+                                    getNode("type").value = "socks"
+                                    getNode("host").value = "localhost"
+                                    getNode("port").value = 1080
+                                    getNode("username").value = "username"
+                                    getNode("password").value = "password"
                                 }
                         )
                         getNode("yggdrasil").setCV(
