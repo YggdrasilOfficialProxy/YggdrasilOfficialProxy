@@ -33,7 +33,7 @@ fun patch(response: HttpResponse, isOfficial: Boolean): ByteArray {
     val dto = response.content.toInputStream().bufferedReader().use {
         adapter.fromJson(it)
     }
-    val p = GameProfileDTO.PropertyDTO("yop-isOfficial", isOfficial.toString())
+    val p = GameProfileDTO.PropertyDTO("yop-isOfficial", isOfficial.toString(), "=")
     dto.properties?.add(p) ?: run {
         dto.properties = mutableListOf(p)
     }
