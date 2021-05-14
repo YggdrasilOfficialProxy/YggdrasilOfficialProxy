@@ -29,31 +29,61 @@ import io.ktor.util.pipeline.*
 import io.ktor.utils.io.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import ninja.leaping.configurate.ConfigurationNode
-import ninja.leaping.configurate.ConfigurationOptions
-import ninja.leaping.configurate.commented.CommentedConfigurationNode
-import ninja.leaping.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.CommentedConfigurationNode
+import org.spongepowered.configurate.ConfigurationNode
+import org.spongepowered.configurate.ConfigurationOptions
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import java.io.File
 import java.lang.instrument.Instrumentation
 import java.net.Authenticator
 import java.net.PasswordAuthentication
+import java.util.*
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.JarFile
 import kotlin.system.exitProcess
+import kotlin.text.Charsets
+import kotlin.text.buildString
+import kotlin.text.endsWith
+import kotlin.text.isNullOrBlank
+import kotlin.text.lowercase
+import kotlin.text.startsWith
+import kotlin.text.substring
+import kotlin.text.toByteArray
+import kotlin.text.toCharArray
 
 object YggdrasilOfficialProxy {
     lateinit var yggdrasilClient: HttpClient
     lateinit var officialClient: HttpClient
 
-    val hasJoin = buildString { // Skip AuthLib Injector
-        append("https://sessionserver")
-        append(".mojang.com")
-        append("/session/minecraft/hasJoined")
+    val hasJoin by lazy {
+        buildString { // Skip AuthLib Injector
+            if (CDN_enable)
+            {
+                append(CDN_origin_link)
+                append("/sessionserver")
+            }
+            else
+            {
+                append("https://sessionserver.")
+                append("mojang.com")
+            }
+            append("/session/minecraft/hasJoined")
+        }
     }
-    val profilesMinecraft = buildString { // Skip AuthLib Injector
-        append("https://api.")
-        append("mojang.")
-        append("com/profiles/minecraft")
+    val profilesMinecraft by lazy {
+        buildString { // Skip AuthLib Injector\
+            if (CDN_enable)
+            {
+                append(CDN_origin_link)
+                append("/api")
+            }
+            else
+            {
+                append("https://api.")
+                append("mojang.com")
+            }
+            append("/profiles/minecraft")
+        }
     }
 
     val output = System.out
@@ -63,14 +93,17 @@ object YggdrasilOfficialProxy {
     var host_C = "0.0.0.0"
     var port_C = 32217
     var authlib by AtomicReference<String?>()
+    var CDN_enable = false
+    var CDN_origin_link = ""
 
     @OptIn(KtorExperimentalAPI::class)
     fun reloadConfiguration() {
         val file = File("YggdrasilOfficialProxy.conf")
         val loader = HoconConfigurationLoader.builder()
-                .setFile(file)
-                .setDefaultOptions(ConfigurationOptions.defaults()
-                        .setShouldCopyDefaults(true)
+                .file(file)
+                .defaultOptions(
+                    ConfigurationOptions.defaults()
+                        .shouldCopyDefaults(true)
                 )
                 .build()
         val conf = kotlin.runCatching {
@@ -80,7 +113,7 @@ object YggdrasilOfficialProxy {
         }.onFailure {
             it.printStackTrace()
         }.getOrNull()
-        val edited = conf != null && conf.getNode("edited").boolean
+        val edited = conf != null && conf.node("edited").boolean
         if (!file.isFile || conf == null || !edited) {
             output.println("# YggdrasilOfficialProxy v2.0.0")
             output.println("# #############################")
@@ -108,8 +141,8 @@ object YggdrasilOfficialProxy {
             exitProcess(-4849)
         }
         fun ConfigurationNode.parseProxy(): ProxyConfig? {
-            val authUsername = getNode("username").string
-            val authPassword = getNode("password").string
+            val authUsername = node("username").string
+            val authPassword = node("password").string
             if (!authUsername.isNullOrBlank() && !authPassword.isNullOrBlank())
             {
                 Authenticator.setDefault(
@@ -118,19 +151,19 @@ object YggdrasilOfficialProxy {
                     }
                 )
             }
-            return when (getNode("type").getString("direct")) {
+            return when (node("type").getString("direct")) {
                 "http" -> {
-                    ProxyBuilder.http(Url(getNode("url").string ?: error("Missing url")))
+                    ProxyBuilder.http(Url(node("url").string ?: error("Missing url")))
                 }
                 "socks" -> {
-                    ProxyBuilder.socks(getNode("host").string ?: error("Missing host"), getNode("port").int)
+                    ProxyBuilder.socks(node("host").string ?: error("Missing host"), node("port").int)
                 }
                 else -> null
             }
         }
 
         fun openClient(type: String): HttpClient {
-            val p = conf.getNode("proxy", type).parseProxy()
+            val p = conf.node("proxy", type).parseProxy()
             WrappedLogger.debug {
                 "Proxy: $type, $p"
             }
@@ -146,16 +179,25 @@ object YggdrasilOfficialProxy {
         }
         yggdrasilClient = openClient("yggdrasil")
         officialClient = openClient("official")
-        this.officialFirst = conf.getNode("official-first").boolean
-        this.host_C = conf.getNode("server", "host").getString("0.0.0.0")
-        this.port_C = conf.getNode("server", "port").getInt(port_C)
-        authlib = conf.getNode("authlib-injector").string
-        baseAPI = conf.getNode("api").getString("https://skin.prinzeugen.net/api/yggdrasil")
+        this.officialFirst = conf.node("official-first").boolean
+        this.host_C = conf.node("server", "host").getString("0.0.0.0")
+        this.port_C = conf.node("server", "port").getInt(port_C)
+        authlib = conf.node("authlib-injector").string
+        baseAPI = conf.node("api").getString("https://skin.prinzeugen.net/api/yggdrasil")
                 .let {
                     if (it.endsWith("/"))
                         it.substring(0, it.length - 1)
                     else it
                 }
+        conf.node("CDN").apply {
+            CDN_enable = node("enable").boolean
+            CDN_origin_link = node("origin").getString("")
+            if (!(CDN_origin_link.startsWith("http://") || CDN_origin_link.startsWith("https://")))
+            {
+                CDN_origin_link = "http://$CDN_origin_link"
+            }
+        }
+
         if (conf != loader.load()) {
             loader.save(conf)
         }
@@ -163,75 +205,78 @@ object YggdrasilOfficialProxy {
 
     private fun HoconConfigurationLoader.regenFile() {
         fun CommentedConfigurationNode.setCV(comment: String, value: Any?) {
-            setComment(comment)
-            setValue(value)
+            comment(comment)
+            set(value)
         }
-        save(createEmptyNode().apply {
-            getNode("edited").setCV(
+        save(createNode().apply {
+            node("edited").setCV(
                     "IMPORTANT: Set this value to `true`!",
                     false
             )
-            getNode("api").setCV(
+            node("api").setCV(
                     "The yggdrasil api root",
                     "https://skin.prinzeugen.net/api/yggdrasil"
             )
-            getNode("server").setCV(
+            node("server").setCV(
                     "The server binding actions.",
-                    createEmptyNode().apply {
-                        getNode("host").value = "0.0.0.0"
-                        getNode("port").value = 32217
+                    createNode().apply {
+                        node("host").set("0.0.0.0")
+                        node("port").set(32217)
                     }
             )
-            getNode("official-first").setCV(
+            node("official-first").setCV(
                     "When access multiple apis. Use official api first.",
                     false
             )
-            getNode("authlib-injector").setCV(
+            node("authlib-injector").setCV(
                     "The location of YggdrasilInjector\n" +
                             "@see https://github.com/yushijinhun/authlib-injector/",
                     "./authlib-injector-XXXX.jar"
             )
-            getNode("proxy").setCV(
+            node("proxy").setCV(
                     "Proxy settings",
-                    createEmptyNode().apply {
-                        getNode("official").setCV(
+                    createNode().apply {
+                        node("official").setCV(
                                 "The proxy of official connecting",
-                                createEmptyNode().apply {
-                                    getNode("type").value = "direct"
+                                createNode().apply {
+                                    node("type").set("direct")
                                 }
                         )
-                        getNode("just-example-for-socks").setCV(
+                        node("just-example-for-socks").setCV(
                                 "Example for socks proxy",
-                                createEmptyNode().apply {
-                                    getNode("type").value = "socks"
-                                    getNode("host").value = "localhost"
-                                    getNode("port").value = 1080
+                                createNode().apply {
+                                    node("type").set("socks")
+                                    node("host").set("localhost")
+                                    node("port").set(1080)
                                 }
                         )
-                        getNode("just-example-for-socks-with-authentication").setCV(
+                        node("just-example-for-socks-with-authentication").setCV(
                                 "Example for socks proxy with authentication",
-                                createEmptyNode().apply {
-                                    getNode("type").value = "socks"
-                                    getNode("host").value = "localhost"
-                                    getNode("port").value = 1080
-                                    getNode("username").value = "username"
-                                    getNode("password").value = "password"
+                                createNode().apply {
+                                    node("type").set("socks")
+                                    node("host").set("localhost")
+                                    node("port").set(1080)
+                                    node("username").set("username")
+                                    node("password").set("password")
                                 }
                         )
-                        getNode("yggdrasil").setCV(
+                        node("yggdrasil").setCV(
                                 "The proxy of yggdrasil connecting",
-                                createEmptyNode().apply {
-                                    getNode("type").value = "direct"
+                                createNode().apply {
+                                    node("type").set("direct")
                                 }
                         )
-                        getNode("just-example-for-http").value =
-                                createEmptyNode().apply {
-                                    getNode("type").value = "http"
-                                    getNode("url").value = "http://localhost/proxy"
-                                }
+                        node("just-example-for-http").set(createNode().apply {
+                            node("type").set("http")
+                            node("url").set("http://localhost/proxy")
+                        })
 
                     }
             )
+            node("CDN").setCV("CDN settings", createNode().apply {
+                node("enable").set(false)
+                node("origin").set("CDN origin link")
+            })
         })
     }
 
@@ -263,17 +308,17 @@ object YggdrasilOfficialProxy {
                         }.filter(object : (Pair<String, Boolean?>) -> Boolean {
                             val filtered = hashSetOf<String>()
                             override fun invoke(p1: Pair<String, Boolean?>): Boolean {
-                                if (p1.first.toLowerCase() in filtered) {
+                                if (p1.first.lowercase(Locale.getDefault()) in filtered) {
                                     return false
                                 }
-                                filtered.add(p1.first.toLowerCase())
+                                filtered.add(p1.first.lowercase(Locale.getDefault()))
                                 return true
                             }
                         })
                         val mapping = query.asSequence().filter {
                             it.second != null
                         }.associate {
-                            it.first.toLowerCase() to when (it.second) {
+                            it.first.lowercase(Locale.getDefault()) to when (it.second) {
                                 true -> "@official"
                                 false -> "@yggdrasil"
                                 else -> throw AssertionError()
@@ -345,13 +390,13 @@ object YggdrasilOfficialProxy {
                         val response = JsonArray()
                         dataFirst.forEach { elm ->
                             response.add(elm)
-                            existed.add(elm.asJsonObject["id"].asString.toLowerCase())
-                            existed.add(elm.asJsonObject["name"].asString.toLowerCase())
+                            existed.add(elm.asJsonObject["id"].asString.lowercase(Locale.getDefault()))
+                            existed.add(elm.asJsonObject["name"].asString.lowercase(Locale.getDefault()))
                         }
                         dataSecond.forEach { elm ->
                             val obj = elm.asJsonObject
-                            val id = obj["id"].asString.toLowerCase()
-                            val name = obj["name"].asString.toLowerCase()
+                            val id = obj["id"].asString.lowercase(Locale.getDefault())
+                            val name = obj["name"].asString.lowercase(Locale.getDefault())
                             if (id !in existed && name !in existed) {
                                 existed.add(id)
                                 existed.add(name)
@@ -361,7 +406,7 @@ object YggdrasilOfficialProxy {
                         response.forEach { resp ->
                             resp.asJsonObject.let {
                                 it.addProperty("name", it["name"].asString.let { old ->
-                                    old + (mapping[old.toLowerCase()] ?: "")
+                                    old + (mapping[old.lowercase(Locale.getDefault())] ?: "")
                                 })
                             }
                         }

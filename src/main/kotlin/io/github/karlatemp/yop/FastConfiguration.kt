@@ -8,15 +8,15 @@
 
 package io.github.karlatemp.yop
 
-import ninja.leaping.configurate.ConfigurationNode
-import ninja.leaping.configurate.ConfigurationOptions
-import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import org.fusesource.jansi.Ansi
 import org.jline.builtins.Completers
 import org.jline.reader.Candidate
 import org.jline.reader.Completer
 import org.jline.reader.LineReaderBuilder
 import org.jline.terminal.TerminalBuilder
+import org.spongepowered.configurate.ConfigurationNode
+import org.spongepowered.configurate.ConfigurationOptions
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import java.io.File
 import java.net.ServerSocket
 import java.net.URL
@@ -25,8 +25,6 @@ import java.util.*
 import java.util.jar.JarFile
 import java.util.regex.Pattern
 import java.util.zip.ZipFile
-import kotlin.collections.ArrayList
-import kotlin.collections.HashMap
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.system.exitProcess
@@ -119,7 +117,7 @@ fun startSetup() {
                 Properties().also { prop -> ver.use { prop.load(it) } }
             }
             val v = prop["version"]?.toString() ?: return@takeIf false
-            val m = Pattern.compile("([0-9]+)\\.([0-9]+)([\\.-]\\S+)?").matcher(v)
+            val m = Pattern.compile("([0-9]+)\\.([0-9]+)([.-]\\S+)?").matcher(v)
             if (m.matches()) {
                 JANSI_MAJOR_VERSION = m.group(1).toInt()
                 JANSI_MINOR_VERSION = m.group(2).toInt()
@@ -223,7 +221,7 @@ fun startSetup() {
                         .a(next)
                 )
                 setupOptions("yes", "no")
-                if (lineReader.readLine("Confirm? [Yes/No]> ").trim().toLowerCase() != "no") {
+                if (lineReader.readLine("Confirm? [Yes/No]> ").trim().lowercase(Locale.getDefault()) != "no") {
                     allOptions.clear()
                     println("Scanning YggdrasilOfficialProxy location...")
                     File(".").walk().maxDepth(1).filter { it.isFile && it.extension == "jar" }
@@ -263,7 +261,7 @@ fun startSetup() {
                     }
                     printDiff()
                     setupOptions("yes", "no")
-                    if (lineReader.readLine("Confirm? [Yes/No]> ").trim().toLowerCase() == "no") {
+                    if (lineReader.readLine("Confirm? [Yes/No]> ").trim().lowercase(Locale.getDefault()) == "no") {
                         println("Cancelled....")
                         exitProcess(1)
                     }
@@ -353,30 +351,31 @@ fun startSetup() {
                         println("    $key = $value")
                     }
                     setupOptions("no", "yes")
-                    if (lineReader.readLine("CONFIRM? ").trim().toLowerCase() != "yes") {
+                    if (lineReader.readLine("CONFIRM? ").trim().lowercase(Locale.getDefault()) != "yes") {
                         println("Cancelled....")
                         exitProcess(5)
                     }
                     val yopConf = File("YggdrasilOfficialProxy.conf")
                     val hoconLoader = HoconConfigurationLoader.builder()
-                            .setFile(yopConf)
-                            .setDefaultOptions(ConfigurationOptions.defaults()
-                                    .setShouldCopyDefaults(true))
+                            .file(yopConf)
+                            .defaultOptions(
+                                ConfigurationOptions.defaults()
+                                    .shouldCopyDefaults(true))
                             .build()
-                    hoconLoader.save(hoconLoader.createEmptyNode().also { root ->
-                        root.getNode("edited").value = true
-                        root.getNode("api").value = api
-                        root.getNode("authlib-injector").value = authlibInjector
-                        root.getNode("official-first").value = officialFirst
-                        root.getNode("server", "host").value = host
-                        root.getNode("server", "port").value = port
+                    hoconLoader.save(hoconLoader.createNode().also { root ->
+                        root.node("edited").set(true)
+                        root.node("api").set(api)
+                        root.node("authlib-injector").set(authlibInjector)
+                        root.node("official-first").set(officialFirst)
+                        root.node("server", "host").set(host)
+                        root.node("server", "port").set(port)
                         fun saveProxy(node: ConfigurationNode, m: Map<String, Any>) {
                             m.forEach { (t, u) ->
-                                node.getNode(t).value = u
+                                node.node(t).set(u)
                             }
                         }
-                        saveProxy(root.getNode("proxy", "official"), proxyOfficial)
-                        saveProxy(root.getNode("proxy", "yggdrasil"), proxyYggdrasil)
+                        saveProxy(root.node("proxy", "official"), proxyOfficial)
+                        saveProxy(root.node("proxy", "yggdrasil"), proxyYggdrasil)
                     })
                     val copied = ArrayList(lines)
                     copied[index] = "$pre-javaagent:$yop$next"

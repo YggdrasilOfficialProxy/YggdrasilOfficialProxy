@@ -166,3 +166,28 @@ proxy {
 
 所以！所以！你需要自己写一个插件! 保证，不会出现两个一样名字的玩家!
 这点非常重要！
+
+# CDN
+
+由于中国大陆部分地区访问 `mojang` 官方验证服务器较慢或无法连接  
+特此在 `2.3.0` 版本加入CDN加速功能  可以通过CDN镜像链接加速官方验证  
+如从低版本升级请手动删除配置文件并重新生成
+```
+# CDN settings
+CDN {
+    enable=true
+    origin="CDN origin link"
+}
+```
+好了, 现在配置文件有了如何配置一个加速源呢  
+此处以 Nginx 反代为例 当然你可以用你熟悉的 web 服务器
+```
+location /sessionserver/ {
+    proxy_pass https://sessionserver.mojang.com/;
+}
+
+location /api/ {
+    proxy_pass https://api.mojang.com/;
+}
+```
+配置完成后将你的服务器 ip/域名 填入 `origin` 字段并将 `enable` 改成 `true` 即可
