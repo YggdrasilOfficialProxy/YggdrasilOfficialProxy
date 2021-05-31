@@ -14,6 +14,9 @@ import io.ktor.client.statement.*
 import io.ktor.utils.io.jvm.javaio.*
 import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
+import kotlin.concurrent.thread
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 data class GameProfileDTO(
         @JvmField var id: String,
@@ -29,11 +32,12 @@ data class GameProfileDTO(
 
 val adapter = Gson().getAdapter(GameProfileDTO::class.java)
 
-fun patch(response: HttpResponse, isOfficial: Boolean): ByteArray {
-    val dto = response.content.toInputStream().bufferedReader().use {
-        adapter.fromJson(it)
-    }
-    val p = GameProfileDTO.PropertyDTO("yop-isOfficial", isOfficial.toString(), "=")
+suspend fun patch(response: HttpResponse, isOfficial: Boolean): ByteArray {
+    val dto = suspendCoroutine<GameProfileDTO> { continuation ->
+        thread { response.content.toInputStream().bufferedReader().use {
+            continuation.resume(adapter.fromJson(it))
+    } } }
+    val p = GameProfileDTO.PropertyDTO("yop_isOfficial", isOfficial.toString(), "=")
     dto.properties?.add(p) ?: run {
         dto.properties = mutableListOf(p)
     }
@@ -42,7 +46,7 @@ fun patch(response: HttpResponse, isOfficial: Boolean): ByteArray {
             val writer = JsonWriter(it)
             writer.isHtmlSafe = false
             writer.serializeNulls = false
-            adapter.write(writer, dto)
+            suspendCoroutine { thread { it.resume(adapter.write(writer, dto)) } }
         }
     }.toByteArray().also { data ->
         WrappedLogger.debug { "Fetched: ${String(data)}" }
