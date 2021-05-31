@@ -1,4 +1,4 @@
-# YggdrasilOfficialProxy v2.0.0
+# YggdrasilOfficialProxy v2.3.0
 
 - Power by kotlin.
 - Configuration powered by [@SpongePowered/Configure](https://github.com/SpongePowered/Configurate)
