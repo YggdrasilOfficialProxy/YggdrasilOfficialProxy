@@ -12,6 +12,9 @@ import com.google.gson.Gson
 import com.google.gson.stream.JsonWriter
 import io.ktor.client.statement.*
 import io.ktor.utils.io.jvm.javaio.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.OutputStreamWriter
 import kotlin.concurrent.thread
@@ -33,10 +36,11 @@ data class GameProfileDTO(
 val adapter = Gson().getAdapter(GameProfileDTO::class.java)
 
 suspend fun patch(response: HttpResponse, isOfficial: Boolean): ByteArray {
-    val dto = suspendCoroutine<GameProfileDTO> { continuation ->
-        thread { response.content.toInputStream().bufferedReader().use {
-            continuation.resume(adapter.fromJson(it))
-    } } }
+    val dto = runInterruptible(Dispatchers.IO) {
+        response.content.toInputStream().bufferedReader().use {
+            adapter.fromJson(it)
+        }
+    }
     val p = GameProfileDTO.PropertyDTO("yop_isOfficial", isOfficial.toString(), "=")
     dto.properties?.add(p) ?: run {
         dto.properties = mutableListOf(p)
@@ -46,7 +50,7 @@ suspend fun patch(response: HttpResponse, isOfficial: Boolean): ByteArray {
             val writer = JsonWriter(it)
             writer.isHtmlSafe = false
             writer.serializeNulls = false
-            suspendCoroutine { thread { it.resume(adapter.write(writer, dto)) } }
+            runInterruptible(Dispatchers.IO) { adapter.write(writer, dto) }
         }
     }.toByteArray().also { data ->
         WrappedLogger.debug { "Fetched: ${String(data)}" }
