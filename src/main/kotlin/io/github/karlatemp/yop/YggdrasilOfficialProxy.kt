@@ -27,7 +27,9 @@ import io.ktor.server.netty.*
 import io.ktor.util.KtorExperimentalAPI
 import io.ktor.util.pipeline.*
 import io.ktor.utils.io.*
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import org.spongepowered.configurate.CommentedConfigurationNode
 import org.spongepowered.configurate.ConfigurationNode
@@ -38,6 +40,8 @@ import java.lang.instrument.Instrumentation
 import java.net.Authenticator
 import java.net.PasswordAuthentication
 import java.util.*
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.JarFile
 import kotlin.system.exitProcess
@@ -95,6 +99,18 @@ object YggdrasilOfficialProxy {
     var authlib by AtomicReference<String?>()
     var CDN_enable = false
     var CDN_origin_link = ""
+
+    var daemon = false
+    val dispatcher by lazy {
+        val yop = ThreadGroup("Yggdrasl Official Proxy Server")
+        val counter = AtomicInteger()
+        Executors.newScheduledThreadPool(3) { task ->
+            Thread(yop, task, "YOP Thread #" + counter.getAndIncrement()).also {
+                it.isDaemon = daemon
+            }
+        }.asCoroutineDispatcher()
+    }
+
 
     @OptIn(KtorExperimentalAPI::class)
     fun reloadConfiguration() {
@@ -290,7 +306,7 @@ object YggdrasilOfficialProxy {
         }
         reloadConfiguration()
         val server = embeddedServer(Netty, environment = applicationEngineEnvironment {
-            parentCoroutineContext = Dispatchers.Main
+            parentCoroutineContext = dispatcher
             this.log = WrappedLogger
             WrappedLogger.trace("Verbose enabled.")
 
@@ -546,6 +562,7 @@ object YggdrasilOfficialProxy {
 
     @JvmStatic
     fun premain(args: String?, instrumentation: Instrumentation) {
+        daemon = true
         main()
         val path = authlib ?: error("Error: Authlib not found. Please fix it.")
         val jar = JarFile(path)
