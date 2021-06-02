@@ -27,7 +27,15 @@ import io.ktor.server.netty.*
 import io.ktor.util.KtorExperimentalAPI
 import io.ktor.util.pipeline.*
 import io.ktor.utils.io.*
-import kotlinx.coroutines.CoroutineDispatcher
+import io.netty.channel.epoll.Epoll
+import io.netty.channel.epoll.EpollEventLoopGroup
+import io.netty.channel.epoll.EpollServerSocketChannel
+import io.netty.channel.kqueue.KQueue
+import io.netty.channel.kqueue.KQueueEventLoopGroup
+import io.netty.channel.kqueue.KQueueServerSocketChannel
+import io.netty.channel.nio.NioEventLoopGroup
+import io.netty.channel.socket.ServerSocketChannel
+import io.netty.channel.socket.nio.NioServerSocketChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
@@ -41,18 +49,12 @@ import java.net.Authenticator
 import java.net.PasswordAuthentication
 import java.util.*
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.jar.JarFile
+import kotlin.reflect.KClass
 import kotlin.system.exitProcess
-import kotlin.text.Charsets
-import kotlin.text.buildString
-import kotlin.text.endsWith
-import kotlin.text.isNullOrBlank
-import kotlin.text.lowercase
-import kotlin.text.startsWith
-import kotlin.text.substring
-import kotlin.text.toByteArray
 import kotlin.text.toCharArray
 
 object YggdrasilOfficialProxy {
@@ -61,13 +63,10 @@ object YggdrasilOfficialProxy {
 
     val hasJoin by lazy {
         buildString { // Skip AuthLib Injector
-            if (CDN_enable)
-            {
+            if (CDN_enable) {
                 append(CDN_origin_link)
                 append("/sessionserver")
-            }
-            else
-            {
+            } else {
                 append("https://sessionserver.")
                 append("mojang.com")
             }
@@ -76,13 +75,10 @@ object YggdrasilOfficialProxy {
     }
     val profilesMinecraft by lazy {
         buildString { // Skip AuthLib Injector\
-            if (CDN_enable)
-            {
+            if (CDN_enable) {
                 append(CDN_origin_link)
                 append("/api")
-            }
-            else
-            {
+            } else {
                 append("https://api.")
                 append("mojang.com")
             }
@@ -101,14 +97,18 @@ object YggdrasilOfficialProxy {
     var CDN_origin_link = ""
 
     var daemon = false
-    val dispatcher by lazy {
+    val threadFactory by lazy {
         val yop = ThreadGroup("Yggdrasl Official Proxy Server")
         val counter = AtomicInteger()
-        Executors.newScheduledThreadPool(3) { task ->
+        ThreadFactory { task ->
             Thread(yop, task, "YOP Thread #" + counter.getAndIncrement()).also {
                 it.isDaemon = daemon
             }
-        }.asCoroutineDispatcher()
+        }
+    }
+    val service by lazy { Executors.newScheduledThreadPool(3, threadFactory) }
+    val dispatcher by lazy {
+        service.asCoroutineDispatcher()
     }
 
 
@@ -118,8 +118,8 @@ object YggdrasilOfficialProxy {
         val loader = HoconConfigurationLoader.builder()
                 .file(file)
                 .defaultOptions(
-                    ConfigurationOptions.defaults()
-                        .shouldCopyDefaults(true)
+                        ConfigurationOptions.defaults()
+                                .shouldCopyDefaults(true)
                 )
                 .build()
         val conf = kotlin.runCatching {
@@ -159,12 +159,11 @@ object YggdrasilOfficialProxy {
         fun ConfigurationNode.parseProxy(): ProxyConfig? {
             val authUsername = node("username").string
             val authPassword = node("password").string
-            if (!authUsername.isNullOrBlank() && !authPassword.isNullOrBlank())
-            {
+            if (!authUsername.isNullOrBlank() && !authPassword.isNullOrBlank()) {
                 Authenticator.setDefault(
-                    object : Authenticator() {
-                        override fun getPasswordAuthentication() = PasswordAuthentication(authUsername, authPassword.toCharArray())
-                    }
+                        object : Authenticator() {
+                            override fun getPasswordAuthentication() = PasswordAuthentication(authUsername, authPassword.toCharArray())
+                        }
                 )
             }
             return when (node("type").getString("direct")) {
@@ -208,8 +207,7 @@ object YggdrasilOfficialProxy {
         conf.node("CDN").apply {
             CDN_enable = node("enable").boolean
             CDN_origin_link = node("origin").getString("")
-            if (!(CDN_origin_link.startsWith("http://") || CDN_origin_link.startsWith("https://")))
-            {
+            if (!(CDN_origin_link.startsWith("http://") || CDN_origin_link.startsWith("https://"))) {
                 CDN_origin_link = "http://$CDN_origin_link"
             }
         }
@@ -294,6 +292,12 @@ object YggdrasilOfficialProxy {
                 node("origin").set("CDN origin link")
             })
         })
+    }
+
+    private fun getChannelClass(): KClass<out ServerSocketChannel> = when {
+        KQueue.isAvailable() -> KQueueServerSocketChannel::class
+        Epoll.isAvailable() -> EpollServerSocketChannel::class
+        else -> NioServerSocketChannel::class
     }
 
     @OptIn(KtorExperimentalAPI::class)
@@ -550,7 +554,18 @@ object YggdrasilOfficialProxy {
                 this.port = port_C
                 output.println("[YggdrasilOfficialProxy] Server running on $host_C:$port_C")
             }
-        })
+        }) {
+            this.shareWorkGroup = true
+            this.configureBootstrap = {
+                fun g() = when {
+                    KQueue.isAvailable() -> KQueueEventLoopGroup(3, threadFactory)
+                    Epoll.isAvailable() -> EpollEventLoopGroup(3, threadFactory)
+                    else -> NioEventLoopGroup(3, threadFactory)
+                }
+                this.group(g(), g())
+                        .channel(getChannelClass().java)
+            }
+        }
         try {
             server.start(args != null)
         } catch (any: Throwable) {
