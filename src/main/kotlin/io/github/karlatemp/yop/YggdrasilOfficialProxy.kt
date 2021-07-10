@@ -12,6 +12,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import io.ktor.application.*
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.engine.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.request.*
@@ -60,7 +61,20 @@ import kotlin.text.toCharArray
 object YggdrasilOfficialProxy {
     lateinit var yggdrasilClient: HttpClient
     lateinit var officialClient: HttpClient
+    lateinit var msaPEClient: HttpClient
 
+    val pe_join by lazy {
+        buildString { // Skip AuthLib Injector
+            if (CDN_enable) {
+                append(CDN_origin_link)
+                append("/sessionserver")
+            } else {
+                append("https://sessionserver.")
+                append("mojang.com")
+            }
+            append("/session/minecraft/join")
+        }
+    }
     val hasJoin by lazy {
         buildString { // Skip AuthLib Injector
             if (CDN_enable) {
@@ -73,6 +87,17 @@ object YggdrasilOfficialProxy {
             append("/session/minecraft/hasJoined")
         }
     }
+    val login_with_xbox by lazy {
+        buildString { // Skip AuthLib Injector
+            if (CDN_enable) {
+                append(CDN_origin_link)
+                append("/minecraftservices")
+            } else {
+                append("https://api.minecraftservices.com")
+            }
+            append("/authentication/login_with_xbox")
+        }
+    }
     val profilesMinecraft by lazy {
         buildString { // Skip AuthLib Injector\
             if (CDN_enable) {
@@ -83,6 +108,17 @@ object YggdrasilOfficialProxy {
                 append("mojang.com")
             }
             append("/profiles/minecraft")
+        }
+    }
+    val pe_profile by lazy {
+        buildString { // Skip AuthLib Injector
+            if (CDN_enable) {
+                append(CDN_origin_link)
+                append("/minecraftservices")
+            } else {
+                append("https://api.minecraftservices.com")
+            }
+            append("/minecraft/profile")
         }
     }
 
@@ -194,6 +230,7 @@ object YggdrasilOfficialProxy {
         }
         yggdrasilClient = openClient("yggdrasil")
         officialClient = openClient("official")
+        msaPEClient = openClient("msape")
         this.officialFirst = conf.node("official-first").boolean
         this.host_C = conf.node("server", "host").getString("0.0.0.0")
         this.port_C = conf.node("server", "port").getInt(port_C)
@@ -316,6 +353,7 @@ object YggdrasilOfficialProxy {
 
             module {
                 install(DefaultHeaders)
+                install(ContentNegotiation)
                 routing {
                     post("/api/profiles/minecraft") {
                         val query = JsonParser.parseString(call.receiveText()).asJsonArray.map { elm ->
@@ -432,6 +470,109 @@ object YggdrasilOfficialProxy {
                         }
                         this.call.respondText(response.toString(), ContentType("application", "json"), HttpStatusCode.OK)
                     }
+
+                    post("/minecraftservices/authentication/login_with_xbox") {
+                        val query = JsonParser.parseString(call.receiveText()).asJsonObject
+                        val identityToken = query.get("identityToken").toString()
+                        WrappedLogger.trace("I - login_with_xbox <- identityToken=$identityToken")
+                        if (identityToken == "") {
+                            WrappedLogger.trace("No identityToken")
+                            this.call.respond(HttpStatusCode.NoContent)
+                            return@post
+                        }
+                        val xboxDeferred = async(Dispatchers.IO) {
+                            runCatching {
+                                WrappedLogger.trace("Connecting to MSAPE...")
+                                val response = msaPEClient.post<HttpResponse>(
+                                    url = URLBuilder().apply {
+                                        takeFrom(login_with_xbox)
+                                    }.build()) {
+                                        contentType(ContentType.Application.Json)
+                                        body = "{\"identityToken\":$identityToken}"
+                                    }
+                                WrappedLogger.trace("Body: {\"identityToken\":$identityToken}")
+                                if (response.status.value == 200) {
+                                    WrappedLogger.trace("MSAPE Responsed...")
+                                    val content = response.receive<String>()
+                                    WrappedLogger.trace("MSAPE Content: $content")
+                                    return@async content
+                                } else {
+                                    WrappedLogger.trace("MSAPE Error: $response")
+                                }
+                            }.onFailure { WrappedLogger.trace("MSAPE Network error", t = it) }
+                            return@async null
+                        }
+                        val xboxResponse = xboxDeferred.await()
+                        WrappedLogger.trace("You, and Me.... Finished.")
+                        this.call.respondText(xboxResponse.toString(), ContentType("application", "json"), HttpStatusCode.OK)
+                    }
+
+                    post("/sessionserver/session/minecraft/join") {
+                        val query = call.receiveText().toString()
+                        WrappedLogger.trace("I - pe_join <- body=$query")
+                        val xboxDeferred = async(Dispatchers.IO) {
+                            runCatching {
+                                WrappedLogger.trace("Connecting to PEJOIN...")
+                                val response = msaPEClient.post<HttpResponse>(
+                                        url = URLBuilder().apply {
+                                            takeFrom(pe_join)
+                                        }.build()) {
+                                    contentType(ContentType.Application.Json)
+                                    body = query
+                                }
+                                if (response.status.value == 200) {
+                                    WrappedLogger.trace("PEJOIN Responsed...")
+                                    val content = response.receive<String>()
+                                    WrappedLogger.trace("PEJOIN Content: $content")
+                                    return@async content
+                                } else {
+                                    WrappedLogger.trace("PEJOIN Error: $response")
+                                }
+                            }.onFailure { WrappedLogger.trace("PEJOIN Network error", t = it) }
+                            return@async null
+                        }
+                        val xboxResponse = xboxDeferred.await()
+                        WrappedLogger.trace("You, and Me.... Finished.")
+                        this.call.respondText(xboxResponse.toString(), ContentType("application", "json"), HttpStatusCode.OK)
+                    }
+
+                    get("/minecraftservices/minecraft/profile") {
+                        val headers = call.request.headers
+                        val auth = headers["authorization"]
+                        WrappedLogger.trace("I - pe_profile <- authorization=$auth")
+                        if (auth == null) {
+                            WrappedLogger.trace("No auth")
+                            this.call.respond(HttpStatusCode.NoContent)
+                            return@get
+                        }
+                        val pe_profile_request = async(Dispatchers.IO) {
+                            runCatching {
+                                WrappedLogger.trace("Connecting to PE_PROFILE...")
+                                val response = msaPEClient.get<HttpResponse>(
+                                        url = URLBuilder().apply {
+                                            takeFrom(pe_profile)
+                                        }.build()) {
+                                    headers {
+                                        append("authorization", auth)
+                                    }
+                                }
+                                WrappedLogger.trace("Body: ${call.receiveText()}")
+                                if (response.status.value == 200) {
+                                    WrappedLogger.trace("PE_PROFILE Responsed...")
+                                    val content = response.receive<String>()
+                                    WrappedLogger.trace("PE_PROFILE Content: $content")
+                                    return@async content
+                                } else {
+                                    WrappedLogger.trace("PE_PROFILE Error: $response")
+                                }
+                            }.onFailure { WrappedLogger.trace("PE_PROFILE Network error", t = it) }
+                            return@async null
+                        }
+                        val profile = pe_profile_request.await()
+                        WrappedLogger.trace("PE Profile Obtained")
+                        this.call.respondText(profile.toString(), ContentType("application", "json"), HttpStatusCode.OK)
+                    }
+
                     @ContextDsl
                     fun getCatching(path: String, body: PipelineInterceptor<Unit, ApplicationCall>): Route = get(path) {
                         runCatching {
@@ -457,6 +598,7 @@ object YggdrasilOfficialProxy {
                             }
                         }
                     }
+
                     getCatching("/sessionserver/session/minecraft/hasJoined") get@{
                         val user = this.call.parameters["username"]
                         val server = this.call.parameters["serverId"]
@@ -484,7 +626,7 @@ object YggdrasilOfficialProxy {
                                     WrappedLogger.trace("Official Responsed...")
                                     return@async response
                                 }
-                            }.onFailure { WrappedLogger.trace("Official NetWork error", t = it) }
+                            }.onFailure { WrappedLogger.trace("Official Network error", t = it) }
                             return@async null
                         }
                         val yggdrasilDeferred = async(Dispatchers.IO) {
