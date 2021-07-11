@@ -121,6 +121,29 @@ object YggdrasilOfficialProxy {
             append("/minecraft/profile")
         }
     }
+    val pe_mojang_authserver_refresh by lazy {
+        buildString { // Skip AuthLib Injector
+            if (CDN_enable) {
+                append(CDN_origin_link)
+                append("/authserver")
+            } else {
+                append("https://authserver.mojang.com")
+            }
+            append("/refresh")
+        }
+    }
+    val pe_mojang_authserver_authenticate by lazy {
+        buildString { // Skip AuthLib Injector
+            if (CDN_enable) {
+                append(CDN_origin_link)
+                append("/authserver")
+            } else {
+                append("https://authserver.mojang.com")
+            }
+            append("/authenticate")
+        }
+    }
+
 
     val output = System.out
 
@@ -520,13 +543,14 @@ object YggdrasilOfficialProxy {
                                     contentType(ContentType.Application.Json)
                                     body = query
                                 }
-                                if (response.status.value == 200) {
-                                    WrappedLogger.trace("PEJOIN Responsed...")
+                                if (response.status.value == 204) {
+                                    WrappedLogger.trace("PEJOIN Logged in")
+                                    return@async null
+                                } else {
+                                    WrappedLogger.trace("PEJOIN Error: $response")
                                     val content = response.receive<String>()
                                     WrappedLogger.trace("PEJOIN Content: $content")
                                     return@async content
-                                } else {
-                                    WrappedLogger.trace("PEJOIN Error: $response")
                                 }
                             }.onFailure { WrappedLogger.trace("PEJOIN Network error", t = it) }
                             return@async null
@@ -534,6 +558,64 @@ object YggdrasilOfficialProxy {
                         val xboxResponse = xboxDeferred.await()
                         WrappedLogger.trace("You, and Me.... Finished.")
                         this.call.respondText(xboxResponse.toString(), ContentType("application", "json"), HttpStatusCode.OK)
+                    }
+
+                    post("/authserver/refresh") {
+                        val query = call.receiveText().toString()
+                        WrappedLogger.trace("I - PE_MOJANG_AUTH_REFRESH <- body=$query")
+                        val deferred= async(Dispatchers.IO) {
+                            runCatching {
+                                WrappedLogger.trace("Connecting to PE_MOJANG_AUTH_REFRESH...")
+                                val response = msaPEClient.post<HttpResponse>(
+                                        url = URLBuilder().apply {
+                                            takeFrom(pe_mojang_authserver_refresh)
+                                        }.build()) {
+                                    contentType(ContentType.Application.Json)
+                                    body = query
+                                }
+                                if (response.status.value == 200) {
+                                    WrappedLogger.trace("PE_MOJANG_AUTH_REFRESH Responsed...")
+                                    val content = response.receive<String>()
+                                    WrappedLogger.trace("PE_MOJANG_AUTH_REFRESH Content: $content")
+                                    return@async content
+                                } else {
+                                    WrappedLogger.trace("PE_MOJANG_AUTH_REFRESH Error: $response")
+                                }
+                            }.onFailure { WrappedLogger.trace("PE_MOJANG_AUTH_REFRESH Network error", t = it) }
+                            return@async null
+                        }
+                        val response = deferred.await()
+                        WrappedLogger.trace("You, and Me.... Finished.")
+                        this.call.respondText(response.toString(), ContentType("application", "json"), HttpStatusCode.OK)
+                    }
+
+                    post("/authserver/authenticate") {
+                        val query = call.receiveText().toString()
+                        WrappedLogger.trace("I - PE_MOJANG_AUTH_AUTH <- body=$query")
+                        val deferred= async(Dispatchers.IO) {
+                            runCatching {
+                                WrappedLogger.trace("Connecting to PE_MOJANG_AUTH_AUTH...")
+                                val response = msaPEClient.post<HttpResponse>(
+                                        url = URLBuilder().apply {
+                                            takeFrom(pe_mojang_authserver_authenticate)
+                                        }.build()) {
+                                    contentType(ContentType.Application.Json)
+                                    body = query
+                                }
+                                if (response.status.value == 200) {
+                                    WrappedLogger.trace("PE_MOJANG_AUTH_AUTH Responsed...")
+                                    val content = response.receive<String>()
+                                    WrappedLogger.trace("PE_MOJANG_AUTH_AUTH Content: $content")
+                                    return@async content
+                                } else {
+                                    WrappedLogger.trace("PE_MOJANG_AUTH_AUTH Error: $response")
+                                }
+                            }.onFailure { WrappedLogger.trace("PE_MOJANG_AUTH_AUTH Network error", t = it) }
+                            return@async null
+                        }
+                        val response = deferred.await()
+                        WrappedLogger.trace("You, and Me.... Finished.")
+                        this.call.respondText(response.toString(), ContentType("application", "json"), HttpStatusCode.OK)
                     }
 
                     get("/minecraftservices/minecraft/profile") {
