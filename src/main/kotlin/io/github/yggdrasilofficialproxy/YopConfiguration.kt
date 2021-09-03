@@ -14,20 +14,58 @@ import org.spongepowered.configurate.objectmapping.meta.Comment
 @ConfigSerializable
 data class YopConfiguration @JvmOverloads constructor(
     @Comment("Proxy server host")
-    val host: ServerHost = ServerHost(),
+    val host : ServerHost = ServerHost(),
     @Comment("Yggdrasil servers using")
-    val yggdrasilServers: List<String> = listOf(
-        "https://skin.prinzeugen.net/api/yggdrasil",
-        "mojang",
+    val yggdrasilServers : List<YggdrasilServerInfo> = listOf(
+        YggdrasilServerInfo(
+            api = "mojang",
+            proxy = YggdrasilServerInfo.ProxyInfo(
+                type = "direct",
+                url = "http://localhost:8888"
+            )
+        ),
+        YggdrasilServerInfo(
+            api = "https://skin.prinzeugen.net/api/yggdrasil",
+            proxy = YggdrasilServerInfo.ProxyInfo(
+                type = "direct",
+                host = "localhost",
+                port = 1080,
+                username = "username",
+                password = "password"
+            )
+        )
     ),
     @Comment("Mojang CDN Yggdrasil server")
-    val mojangServerCdn: String = "",
+    val mojangServerCdn : String = "",
 ) {
 
     @ConfigSerializable
+    data class YggdrasilServerInfo @JvmOverloads constructor(
+        val api : String = "",
+        @Comment("Proxy info")
+        val proxy : ProxyInfo = ProxyInfo()
+    ) {
+        @ConfigSerializable
+        data class ProxyInfo @JvmOverloads constructor(
+            @Comment("<Required> (direct, http, socks)")
+            val type : String = "direct",
+            @Comment("<Optional> Please fill in the [url] when you use http proxy")
+            val url : String? = null,
+            @Comment("<Optional> Please fill in the [host] when you use socks proxy")
+            val host : String? = null,
+            @Comment("<Optional> Please fill in the [port] when you use socks proxy")
+            val port : Int? = null,
+            @Comment("<Optional> Please fill in the [username] when this proxy needs to be authenticated")
+            val username : String? = null,
+            @Comment("<Optional> Please fill in the [password] when this proxy needs to be authenticated")
+            val password : String? = null
+        )
+    }
+
+    @ConfigSerializable
     data class ServerHost @JvmOverloads constructor(
-        val host: String = "0.0.0.0",
-        val port: Int = 32217,
+        val host : String = "0.0.0.0",
+        val port : Int = 32217,
     )
 
 }

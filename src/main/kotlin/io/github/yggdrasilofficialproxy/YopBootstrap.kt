@@ -10,18 +10,14 @@
 
 package io.github.yggdrasilofficialproxy
 
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import okhttp3.Dispatcher
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import java.io.File
-import java.util.concurrent.Executors
 
 
 fun main(args: Array<String>) {
@@ -44,11 +40,7 @@ Yggdrasil Official Proxy Configuration
     val configNode = configLoader.load()
     val oldConf = configLoader.load()
 
-    val yopConfiguration = configNode.get(YopConfiguration::class.java) ?: kotlin.run {
-        val cf = YopConfiguration()
-        configNode.set(YopConfiguration::class.java, cf)
-        cf
-    }
+    val yopConfiguration = configNode.get(YopConfiguration::class.java, YopConfiguration())
 
     if (configNode != oldConf) {
         configLoader.save(configNode)
@@ -56,29 +48,13 @@ Yggdrasil Official Proxy Configuration
 
     val server = YopProxyServer(
         yopConfiguration,
-        HttpClient(OkHttp) {
-            // TODO: HttpClient Proxy
-            this.expectSuccess = false
-            this.engine {
-                config {
-                    retryOnConnectionFailure(true)
-                    if (isDaemon) {
-                        val service = Executors.newScheduledThreadPool(
-                            5,
-                            ThreadUtils.newThreadFactory("Ktor Dispatcher", true)
-                        )
-                        dispatcher(Dispatcher(service))
-                    }
-                }
-            }
-        },
         isDaemon,
     )
-    val ygg = server.resolvedYggdrasilServers.firstOrNull { it.name != "mojang" }
+    val ygg = server.resolvedYggdrasilServers.firstOrNull { it.api != "mojang" }
         ?: error("No custom yggdrasil found.")
 
     runBlocking(Dispatchers.IO) {
-        val rsp: HttpResponse = server.http.get(ygg.serverIndex)
+        val rsp: HttpResponse = ygg.client.get(ygg.serverIndex)
         server.indexContentType = rsp.contentType()
         server.indexPageView = rsp.content.toInputStream().use { it.readBytes() }
     }

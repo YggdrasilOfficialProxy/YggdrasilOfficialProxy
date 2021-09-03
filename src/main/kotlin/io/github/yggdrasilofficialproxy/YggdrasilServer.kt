@@ -8,29 +8,57 @@
 
 package io.github.yggdrasilofficialproxy
 
+import io.ktor.client.*
+import io.ktor.client.engine.*
+import io.ktor.client.engine.okhttp.*
+import okhttp3.Dispatcher
 import java.net.URI
 
 data class YggdrasilServer(
-    val name: String,
+    val api: String,
     val hasJoined: String,
     val profilesMinecraft: String,
     val serverIndex: String,
+    val client : HttpClient,
+    val proxyInfo : YopConfiguration.YggdrasilServerInfo.ProxyInfo,
 ) {
     companion object {
         @JvmStatic
-        operator fun invoke(server: String): YggdrasilServer {
-            if (server == "mojang") return MOJANG
+        operator fun invoke(serverInfo: YopConfiguration.YggdrasilServerInfo, dispatcher : Dispatcher?): YggdrasilServer {
+            val api = serverInfo.api
+            val proxyInfo = serverInfo.proxy
+            if (api == "mojang") return mojangInstance(proxyInfo, dispatcher)
             return YggdrasilServer(
-                name = URI.create(server).host ?: server,
-                hasJoined = "$server/sessionserver/session/minecraft/hasJoined",
-                profilesMinecraft = "$server/api/profiles/minecraft",
-                serverIndex = server,
+                api = URI.create(api).host ?: api,
+                hasJoined = "$api/sessionserver/session/minecraft/hasJoined",
+                profilesMinecraft = "$api/api/profiles/minecraft",
+                serverIndex = api,
+                client = HttpClient(OkHttp)
+                {
+                    expectSuccess = false
+
+                    when (proxyInfo.type)
+                    {
+                        "http" -> ProxyBuilder.http(proxyInfo.url ?: error("Proxy in [$api] is missing url"))
+                        "socks" -> ProxyBuilder.socks(proxyInfo.host ?: error("Proxy in [$api] is missing host"), proxyInfo.port ?: error("Proxy in [$api] is missing port"))
+                        "direct" -> null
+                        else -> null
+                    }.also {
+                        engine {
+                            proxy = it
+                            config {
+                                retryOnConnectionFailure(true)
+                                dispatcher?.also { dispatcher -> dispatcher(dispatcher) }
+                            }
+                        }
+                    }
+                },
+                proxyInfo = proxyInfo
             )
         }
 
-        @JvmField
-        val MOJANG = YggdrasilServer(
-            name = "mojang",
+        fun mojangInstance(proxyInfo : YopConfiguration.YggdrasilServerInfo.ProxyInfo, dispatcher : Dispatcher?) = YggdrasilServer(
+            api = "mojang",
             serverIndex = "", // none
             hasJoined = buildString {
                 append("https://sessionserver.")
@@ -44,6 +72,26 @@ data class YggdrasilServer(
                 append("ng.com")
                 append("/profiles/minecraft")
             },
+            client = HttpClient(OkHttp)
+            {
+                expectSuccess = false
+                when (proxyInfo.type)
+                {
+                    "http" -> ProxyBuilder.http(proxyInfo.url ?: error("Proxy in [mojang] is missing url"))
+                    "socks" -> ProxyBuilder.socks(proxyInfo.host ?: error("Proxy in [mojang] is missing host"), proxyInfo.port ?: error("Proxy in [mojang] is missing port"))
+                    "direct" -> null
+                    else -> null
+                }.also {
+                    engine {
+                        proxy = it
+                        config {
+                            retryOnConnectionFailure(true)
+                            dispatcher?.also { dispatcher -> dispatcher(dispatcher) }
+                        }
+                    }
+                }
+            },
+            proxyInfo = proxyInfo
         )
     }
 }
