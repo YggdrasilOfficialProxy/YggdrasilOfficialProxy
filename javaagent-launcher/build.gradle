@@ -1,0 +1,25 @@
+/*
+ * Copyright (c) 2018-2021 Karlatemp. All rights reserved.
+ * @author Karlatemp <karlatemp@vip.qq.com> <https://github.com/Karlatemp>
+ * @create 2021/09/04 24:20:53
+ *
+ * YggdrasilOfficialProxy/YggdrasilOfficialProxy.javaagent-launcher/build.gradle
+ */
+
+plugins {
+    id 'java'
+}
+
+jar {
+    from(project(':').tasks.standardShadowJar.outputs.files) {
+        into 'yop-artifact'
+        rename { 'yggdrasil-official-proxy.jar' }
+    }
+
+    //noinspection GroovyAssignabilityCheck
+    manifest {
+        attributes([
+                'Premain-Class': 'io.github.yggdrasilofficialproxy.agentlaunch.YOPAgentLauncher',
+        ])
+    }
+}
