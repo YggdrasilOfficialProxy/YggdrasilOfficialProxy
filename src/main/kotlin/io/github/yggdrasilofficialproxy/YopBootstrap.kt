@@ -18,11 +18,15 @@ import io.ktor.http.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import okhttp3.Dispatcher
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import java.io.File
+import java.util.concurrent.Executors
 
 
-fun main() {
+fun main(args: Array<String>) {
+    val isDaemon = args.getOrNull(0) == "daemon"
+
     val configLoader = HoconConfigurationLoader.builder()
         .prettyPrinting(true)
         .emitComments(true)
@@ -58,9 +62,17 @@ Yggdrasil Official Proxy Configuration
             this.engine {
                 config {
                     retryOnConnectionFailure(true)
+                    if (isDaemon) {
+                        val service = Executors.newScheduledThreadPool(
+                            5,
+                            ThreadUtils.newThreadFactory("Ktor Dispatcher", true)
+                        )
+                        dispatcher(Dispatcher(service))
+                    }
                 }
             }
-        }
+        },
+        isDaemon,
     )
     val ygg = server.resolvedYggdrasilServers.firstOrNull { it.name != "mojang" }
         ?: error("No custom yggdrasil found.")
@@ -70,5 +82,5 @@ Yggdrasil Official Proxy Configuration
         server.indexContentType = rsp.contentType()
         server.indexPageView = rsp.content.toInputStream().use { it.readBytes() }
     }
-    server.startProxyServer(true)
+    server.startProxyServer(!isDaemon)
 }

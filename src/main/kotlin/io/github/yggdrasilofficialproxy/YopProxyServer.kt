@@ -25,11 +25,9 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.util.pipeline.*
 import io.ktor.utils.io.jvm.javaio.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
 
 typealias KtorHttpRequest = PipelineContext<Unit, ApplicationCall>
 
@@ -37,6 +35,7 @@ typealias KtorHttpRequest = PipelineContext<Unit, ApplicationCall>
 class YopProxyServer(
     val config: YopConfiguration,
     val http: HttpClient,
+    val isDaemon: Boolean,
 ) {
     var indexContentType: ContentType? = null
     lateinit var indexPageView: ByteArray // yggdrasil index page view
@@ -147,6 +146,11 @@ class YopProxyServer(
 
     private fun setupYopEnvironment() = applicationEngineEnvironment {
         this.log = Slf4jStdoutLogger
+        if (isDaemon) {
+            this.parentCoroutineContext = Executors.newScheduledThreadPool(
+                5, ThreadUtils.newThreadFactory("Yggdrasil Ktor Server", true)
+            ).asCoroutineDispatcher()
+        }
 
         val yopConf = this@YopProxyServer.config
         connector {
@@ -203,8 +207,8 @@ class YopProxyServer(
             this.shareWorkGroup = true
             this.configureBootstrap = {
                 this.group(
-                    newNettyEventLoopGroup(),
-                    newNettyEventLoopGroup(),
+                    newNettyEventLoopGroup(isDaemon),
+                    newNettyEventLoopGroup(isDaemon),
                 ).channel(NettyServerSocketClass)
             }
         }

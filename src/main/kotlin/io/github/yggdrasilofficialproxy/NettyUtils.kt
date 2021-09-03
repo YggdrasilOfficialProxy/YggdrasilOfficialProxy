@@ -29,9 +29,12 @@ object NettyUtils {
         }
 
     @JvmStatic
-    fun newNettyEventLoopGroup(): EventLoopGroup = when {
-        KQueue.isAvailable() -> KQueueEventLoopGroup()
-        Epoll.isAvailable() -> EpollEventLoopGroup()
-        else -> NioEventLoopGroup()
+    fun newNettyEventLoopGroup(isDaemon: Boolean): EventLoopGroup {
+        val factory = ThreadUtils.newThreadFactory("Netty EventLoopGroup", isDaemon)
+        return when {
+            KQueue.isAvailable() -> KQueueEventLoopGroup(factory)
+            Epoll.isAvailable() -> EpollEventLoopGroup(factory)
+            else -> NioEventLoopGroup(factory)
+        }
     }
 }
