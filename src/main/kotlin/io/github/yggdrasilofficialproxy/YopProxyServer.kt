@@ -45,8 +45,8 @@ class YopProxyServer(
         var rsp = config.yggdrasilServers.map { YggdrasilServer(it) }
         if (config.mojangServerCdn.isNotBlank()) {
             rsp = rsp.map { server ->
-                server.letIf(server.name == config.mojangServerCdn) {
-                    it.copy(name = "mojang")
+                server.letIf(server.name == "mojang") {
+                    YggdrasilServer(config.mojangServerCdn).copy(name = "mojang")
                 }
             }
         }
