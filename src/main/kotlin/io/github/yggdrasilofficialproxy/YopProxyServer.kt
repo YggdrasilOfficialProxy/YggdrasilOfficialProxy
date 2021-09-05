@@ -171,8 +171,7 @@ class YopProxyServer(
         })
     }
 
-    private suspend fun processProfiles(request : KtorHttpRequest, scope : CoroutineScope)
-    {
+    private suspend fun processProfiles(request : KtorHttpRequest, scope : CoroutineScope) {
         Slf4jStdoutLogger.debug { "Processing ${request.call.request.origin.uri}" }
         if (resolvedYggdrasilServers.isEmpty()) {
             throw IllegalStateException("No available yggdrasil servers.")
@@ -181,14 +180,18 @@ class YopProxyServer(
         val pairs = JsonParser.parseString(request.call.receiveText()).asJsonArray.map {
             val value = it.asString
             val index = value.indexOf("@")
-            if (index != -1) value.substring(0, index) to value.substring(index + 1, value.count()) else value to null
+            if (index != -1) {
+                value.substring(0, index) to value.substring(index + 1, value.count())
+            } else {
+                value to null
+            }
         }.mapNotNull { pair ->
             val server = resolvedYggdrasilServers.find { it.name == pair.second }
                 ?: if (pair.second == null) resolvedYggdrasilServers.find { it.name == "mojang" } else null
             server ?: return@mapNotNull null
+
             return@mapNotNull pair.first to server
-        }.filter(object : (Pair<String, YggdrasilServer>) -> Boolean
-        {
+        }.filter(object : (Pair<String, YggdrasilServer>) -> Boolean {
             val collected = hashSetOf<String>()
             override fun invoke(pair : Pair<String, YggdrasilServer>) = collected.add(pair.first)
         })
@@ -248,7 +251,15 @@ class YopProxyServer(
                         Sorry, we have no way to help you redirect the link because we cannot get the host that authlib-injector has already destroyed.
                         But the good news is that the problem has a solution. This problem has been fixed by my feature in authlib-injector. 
                         PLEASE DO NOT OPEN ISSUE OR PR UNDER THIS PROJECT.
-                        You can refer to these two link https://github.com/yushijinhun/authlib-injector/pull/63, https://github.com/YggdrasilOfficialProxy/YggdrasilOfficialProxy/pull/25. Find the link [${context.request.uri}] For the package name of the class and add it to the -Dauthlibinjector.ignoredPackages startup parameter of authlib-injector. 
+                        You can refer to these two link:
+                        
+                        https://github.com/yushijinhun/authlib-injector/pull/63
+                        https://github.com/YggdrasilOfficialProxy/YggdrasilOfficialProxy/pull/25
+                        
+                        Open your server plugins that may sending mojang api requesting, via zip explorer (like NPC plugins, Geyser plugin-mode)
+                        Find there package names and add into -Dauthlibinjector.ignoredPackages startup parameter of authlib-injector.
+                        
+                        Requested link: [${context.request.uri}]
                     """.trimIndent()
                     }
                     Slf4jStdoutLogger.warn { "====================================================================================" }
@@ -276,7 +287,11 @@ class YopProxyServer(
                             }
                         }
                     }
-                    return if (method != null) route(path, method) { handle { catchingCallable(this) } } else route(path) { handle { catchingCallable(this) } }
+                    return if (method != null) {
+                        route(path, method) { handle { catchingCallable(this) } }
+                    } else {
+                        route(path) { handle { catchingCallable(this) } }
+                    }
                 }
 
                 @ContextDsl
