@@ -18,13 +18,14 @@ data class YopConfiguration @JvmOverloads constructor(
     @Comment("Yggdrasil servers using")
     val yggdrasilServers : List<YggdrasilServerInfo> = listOf(
         YggdrasilServerInfo(
-            api = "mojang",
+            name = "mojang",
             proxy = YggdrasilServerInfo.ProxyInfo(
                 type = "direct",
                 url = "http://localhost:8888"
             )
         ),
         YggdrasilServerInfo(
+            name = "prinzeugen",
             api = "https://skin.prinzeugen.net/api/yggdrasil",
             proxy = YggdrasilServerInfo.ProxyInfo(
                 type = "direct",
@@ -35,12 +36,13 @@ data class YopConfiguration @JvmOverloads constructor(
             )
         )
     ),
-    @Comment("Mojang CDN Yggdrasil server")
-    val mojangServerCdn : String = "",
 ) {
 
     @ConfigSerializable
     data class YggdrasilServerInfo @JvmOverloads constructor(
+        @Comment("<Optional> When you use @ selector please fill it")
+        val name : String = "",
+        @Comment("<Required>")
         val api : String = "",
         @Comment("Proxy info")
         val proxy : ProxyInfo = ProxyInfo()

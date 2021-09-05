@@ -50,7 +50,7 @@ Yggdrasil Official Proxy Configuration
         yopConfiguration,
         isDaemon,
     )
-    val ygg = server.resolvedYggdrasilServers.firstOrNull { it.api != "mojang" }
+    val ygg = server.resolvedYggdrasilServers.firstOrNull { it.name != "mojang" }
         ?: error("No custom yggdrasil found.")
 
     runBlocking(Dispatchers.IO) {

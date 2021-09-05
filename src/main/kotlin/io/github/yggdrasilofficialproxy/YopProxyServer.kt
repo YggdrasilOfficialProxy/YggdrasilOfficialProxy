@@ -8,11 +8,11 @@
 
 package io.github.yggdrasilofficialproxy
 
+import com.google.gson.JsonParser
 import com.google.gson.stream.JsonWriter
 import io.github.yggdrasilofficialproxy.NettyUtils.NettyServerSocketClass
 import io.github.yggdrasilofficialproxy.NettyUtils.newNettyEventLoopGroup
 import io.ktor.application.*
-import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.features.*
@@ -23,7 +23,6 @@ import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
-import io.ktor.util.*
 import io.ktor.util.pipeline.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.*
@@ -34,19 +33,18 @@ import java.net.PasswordAuthentication
 import java.net.URL
 import java.util.*
 import java.util.concurrent.Executors
-import kotlin.text.toCharArray
 
 typealias KtorHttpRequest = PipelineContext<Unit, ApplicationCall>
 
 
 class YopProxyServer(
-    val config: YopConfiguration,
-    val isDaemon: Boolean,
+    val config : YopConfiguration,
+    val isDaemon : Boolean,
 ) {
-    var indexContentType: ContentType? = null
-    lateinit var indexPageView: ByteArray // yggdrasil index page view
+    var indexContentType : ContentType? = null
+    lateinit var indexPageView : ByteArray // yggdrasil index page view
 
-    val resolvedYggdrasilServers = kotlin.run {
+    val resolvedYggdrasilServers = run {
         val dispatcher = if (isDaemon) {
             Dispatcher(
                 Executors.newScheduledThreadPool(
@@ -55,22 +53,14 @@ class YopProxyServer(
                 )
             )
         } else null
-        var rsp = config.yggdrasilServers.map { YggdrasilServer(it, dispatcher) }
-        if (config.mojangServerCdn.isNotBlank()) {
-            rsp = rsp.map { server ->
-                server.letIf(server.api == "mojang") {
-                    it.copy(api = config.mojangServerCdn)
-                }
-            }
-        }
-        if (rsp.none { it.api == "mojang" }) {
+        val rsp = config.yggdrasilServers.map { YggdrasilServer(it, dispatcher) }
+        if (rsp.none { it.name == "mojang" }) {
             Slf4jStdoutLogger.warn("No mojang yggdrasil remote target. Minecraft Online Auth will be disabled")
         }
         rsp.forEach { ys ->
-            Slf4jStdoutLogger.debug { "Server: ${ys.api} ${ys.serverIndex}" }
+            Slf4jStdoutLogger.debug { "Server: ${ys.name} ${ys.api} ${ys.serverIndex}" }
         }
-        Authenticator.setDefault(object : Authenticator()
-        {
+        Authenticator.setDefault(object : Authenticator() {
             override fun getPasswordAuthentication() : PasswordAuthentication {
                 if (requestorType == RequestorType.PROXY) {
                     val protocol = requestingProtocol.lowercase(Locale.getDefault())
@@ -94,21 +84,21 @@ class YopProxyServer(
         rsp
     }
 
-    private fun logException(exception: Throwable) {
+    private fun logException(exception : Throwable) {
         Slf4jStdoutLogger.error(null, exception)
     }
 
     private suspend fun patchHasJoinedResponse(
-        response: HttpResponse,
-        server: YggdrasilServer,
-    ): ByteArray {
+        response : HttpResponse,
+        server : YggdrasilServer,
+    ) : ByteArray {
         val dto = runInterruptible(Dispatchers.IO) {
             response.content.toInputStream().bufferedReader().use {
                 MojangGameProfileDTO.ADAPTER.fromJson(it)
             }
         }
 
-        fun putProperty(key: String, value: Any) {
+        fun putProperty(key : String, value : Any) {
             val prop = MojangGameProfileDTO.PropertyDTO(
                 name = key,
                 value = value.toString(),
@@ -119,8 +109,9 @@ class YopProxyServer(
             }
         }
 
-        putProperty("yop_isOfficial", server.api == "mojang")
-        putProperty("yop_server", server.api)
+        putProperty("yop_isOfficial", server.name == "mojang")
+        putProperty("yop_server_name", server.name)
+        putProperty("yop_server_api", server.api)
 
         return runInterruptible(Dispatchers.IO) {
             ByteArrayOutputStream().also { baos ->
@@ -134,7 +125,7 @@ class YopProxyServer(
         }
     }
 
-    private suspend fun processHasJoined(request: KtorHttpRequest, scope: CoroutineScope) {
+    private suspend fun processHasJoined(request : KtorHttpRequest, scope : CoroutineScope) {
         Slf4jStdoutLogger.debug { "Processing ${request.call.request.origin.uri}" }
         if (resolvedYggdrasilServers.isEmpty()) {
             throw IllegalStateException("No available yggdrasil servers.")
@@ -143,9 +134,9 @@ class YopProxyServer(
             scope.async(Dispatchers.IO) {
                 val uri = server.hasJoined + request.call.request.origin.uri.substringAfterAndInclude('?', "")
                 Slf4jStdoutLogger.debug { "Requesting $uri" }
-                val resp: HttpResponse = try {
+                val resp : HttpResponse = try {
                     server.client.get(uri)
-                } catch (e: Throwable) {
+                } catch (e : Throwable) {
                     if (Slf4jStdoutLogger.isWarnEnabled) {
                         Slf4jStdoutLogger.warn("Error in requesting $uri", e)
                     }
@@ -171,13 +162,64 @@ class YopProxyServer(
         }
 
         request.call.respond(object : OutgoingContent.ByteArrayContent() {
-            override fun bytes(): ByteArray = rsp
+            override fun bytes() : ByteArray = rsp
 
-            override val status: HttpStatusCode
+            override val status : HttpStatusCode
                 get() = httpResponse.status
-            override val contentType: ContentType
+            override val contentType : ContentType
                 get() = ContentType("application", "json; charset=utf8")
         })
+    }
+
+    private suspend fun processProfiles(request : KtorHttpRequest, scope : CoroutineScope)
+    {
+        Slf4jStdoutLogger.debug { "Processing ${request.call.request.origin.uri}" }
+        if (resolvedYggdrasilServers.isEmpty()) {
+            throw IllegalStateException("No available yggdrasil servers.")
+        }
+        val contentType = ContentType.Application.Json
+        val pairs = JsonParser.parseString(request.call.receiveText()).asJsonArray.map {
+            val value = it.asString
+            val index = value.indexOf("@")
+            if (index != -1) value.substring(0, index) to value.substring(index + 1, value.count()) else value to null
+        }.mapNotNull { pair ->
+            val server = resolvedYggdrasilServers.find { it.name == pair.second }
+                ?: if (pair.second == null) resolvedYggdrasilServers.find { it.name == "mojang" } else null
+            server ?: return@mapNotNull null
+            return@mapNotNull pair.first to server
+        }.filter(object : (Pair<String, YggdrasilServer>) -> Boolean
+        {
+            val collected = hashSetOf<String>()
+            override fun invoke(pair : Pair<String, YggdrasilServer>) = collected.add(pair.first)
+        })
+        Slf4jStdoutLogger.debug {
+            "Query profile data:\n" +
+                "  -> YggdrasilServer: $pairs"
+        }
+        val response = pairs.groupBy { it.second }.map {
+            val server = it.key
+            scope.async {
+                runCatching {
+                    server.client.post<String>(server.profilesMinecraft) {
+                        contentType(contentType)
+                        body = it.value.map { pair -> pair.first }
+                    }
+                }.getOrElse { th ->
+                    Slf4jStdoutLogger.trace(null, t = th)
+                    "[]"
+                }
+            }
+        }.awaitAll().flatMap { JsonParser.parseString(it).asJsonArray }.map {
+            val name = it.asJsonObject["name"].asString
+            val yggdrasilServerName = pairs.find { pair -> pair.first == name }?.second?.name ?: return@map it
+            it.asJsonObject.addProperty("name", "$name@$yggdrasilServerName")
+            return@map it
+        }
+        Slf4jStdoutLogger.debug {
+            "Query response data: \n" +
+                "  <- YggdrasilServer: $response"
+        }
+        request.call.respondText("$response", contentType, HttpStatusCode.OK)
     }
 
     private fun setupYopEnvironment() = applicationEngineEnvironment {
@@ -199,14 +241,16 @@ class YopProxyServer(
             {
                 status(HttpStatusCode.NotFound) {
                     Slf4jStdoutLogger.warn { "====================================================================================" }
-                    Slf4jStdoutLogger.warn { """
+                    Slf4jStdoutLogger.warn {
+                        """
                         Oh, there seems to be a link that was incorrectly intercepted by authlib-injector,
                         This may cause some functions in the game or plugin to be unavailable, including but not limited to skin/head image,
                         Sorry, we have no way to help you redirect the link because we cannot get the host that authlib-injector has already destroyed.
                         But the good news is that the problem has a solution. This problem has been fixed by my feature in authlib-injector. 
                         PLEASE DO NOT OPEN ISSUE OR PR UNDER THIS PROJECT.
                         You can refer to these two link https://github.com/yushijinhun/authlib-injector/pull/63, https://github.com/YggdrasilOfficialProxy/YggdrasilOfficialProxy/pull/25. Find the link [${context.request.uri}] For the package name of the class and add it to the -Dauthlibinjector.ignoredPackages startup parameter of authlib-injector. 
-                    """.trimIndent() }
+                    """.trimIndent()
+                    }
                     Slf4jStdoutLogger.warn { "====================================================================================" }
                 }
             }
@@ -221,21 +265,30 @@ class YopProxyServer(
 
             routing {
                 @ContextDsl
-                fun getCatching(path: String, body: PipelineInterceptor<Unit, ApplicationCall>): Route = get(path) {
-                    runCatching {
-                        body(it)
-                    }.onFailure { exception ->
-                        logException(exception)
-                        kotlin.runCatching {
-                            call.respond(HttpStatusCode.InternalServerError)
+                fun handleCatching(path : String, body : PipelineInterceptor<Unit, ApplicationCall>, method : HttpMethod?) : Route {
+                    val catchingCallable : suspend (PipelineContext<Unit, ApplicationCall>) -> Unit = {
+                        runCatching {
+                            body(it, Unit)
+                        }.onFailure { exception ->
+                            logException(exception)
+                            kotlin.runCatching {
+                                it.context.respond(HttpStatusCode.InternalServerError)
+                            }
                         }
                     }
+                    return if (method != null) route(path, method) { handle { catchingCallable(this) } } else route(path) { handle { catchingCallable(this) } }
                 }
+
+                @ContextDsl
+                fun getCatching(path : String, body : PipelineInterceptor<Unit, ApplicationCall>) : Route = handleCatching(path, body, HttpMethod.Get)
+
+                @ContextDsl
+                fun postCatching(path : String, body : PipelineInterceptor<Unit, ApplicationCall>) : Route = handleCatching(path, body, HttpMethod.Post)
 
                 getCatching("/") {
                     call.respond(object : OutgoingContent.ByteArrayContent() {
-                        override fun bytes(): ByteArray = indexPageView
-                        override val contentType: ContentType? get() = indexContentType
+                        override fun bytes() : ByteArray = indexPageView
+                        override val contentType : ContentType? get() = indexContentType
                     })
                 }
 
@@ -243,12 +296,14 @@ class YopProxyServer(
                     processHasJoined(this, this)
                 }
 
-                // TODO: /api/profiles/minecraft
+                postCatching("/api/profiles/minecraft") {
+                    processProfiles(this, this)
+                }
             }
         }
     }
 
-    fun startProxyServer(wait: Boolean) {
+    fun startProxyServer(wait : Boolean) {
         val server = embeddedServer(Netty, environment = setupYopEnvironment()) {
             this.shareWorkGroup = true
             this.configureBootstrap = {
