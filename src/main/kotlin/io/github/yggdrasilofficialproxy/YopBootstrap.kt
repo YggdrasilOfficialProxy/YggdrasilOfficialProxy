@@ -45,6 +45,7 @@ Yggdrasil Official Proxy Configuration
     if (configNode != oldConf) {
         configLoader.save(configNode)
     }
+    Slf4jStdoutLogger.level = yopConfiguration.loggerLevel
 
     val server = YopProxyServer(
         yopConfiguration,

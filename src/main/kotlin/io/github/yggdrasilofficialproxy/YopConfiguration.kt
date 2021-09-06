@@ -36,6 +36,8 @@ data class YopConfiguration @JvmOverloads constructor(
             )
         )
     ),
+    @Comment("Logger level, options: NONE, ERROR, WARN, INFO, DEBUG, TRACE, ALL")
+    val loggerLevel : LoggerLevel = LoggerLevel.INFO,
 ) {
 
     @ConfigSerializable
@@ -70,5 +72,20 @@ data class YopConfiguration @JvmOverloads constructor(
         val port : Int = 32217,
     )
 
+    enum class LoggerLevel {
+        NONE,
+        ERROR,
+        WARN,
+        INFO,
+        DEBUG,
+        TRACE,
+        ALL,
+        ;
+
+        val echoType : String by lazy {
+            val maxWidth = values().maxOf { it.name.length }
+            name + " ".repeat(maxWidth - name.length)
+        }
+    }
 }
 

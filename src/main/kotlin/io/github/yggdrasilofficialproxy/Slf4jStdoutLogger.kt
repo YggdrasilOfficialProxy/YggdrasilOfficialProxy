@@ -8,12 +8,15 @@
 
 package io.github.yggdrasilofficialproxy
 
+import io.github.yggdrasilofficialproxy.YopConfiguration.LoggerLevel
 import org.slf4j.helpers.MarkerIgnoringBase
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 object Slf4jStdoutLogger : MarkerIgnoringBase() {
+    var level: LoggerLevel = LoggerLevel.ALL
+
     private val FORMAT_REGEX = """\{(\d+)\}""".toRegex()
     private inline val NUL_THROWABLE: Throwable? get() = null
     private val D_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss")
@@ -30,18 +33,18 @@ object Slf4jStdoutLogger : MarkerIgnoringBase() {
     }
 
     // TODO: Log Level
-    override fun isTraceEnabled(): Boolean = true
-    override fun isDebugEnabled(): Boolean = true
-    override fun isInfoEnabled(): Boolean = true
-    override fun isWarnEnabled(): Boolean = true
-    override fun isErrorEnabled(): Boolean = true
+    override fun isTraceEnabled(): Boolean = level >= LoggerLevel.TRACE
+    override fun isDebugEnabled(): Boolean = level >= LoggerLevel.DEBUG
+    override fun isInfoEnabled(): Boolean = level >= LoggerLevel.INFO
+    override fun isWarnEnabled(): Boolean = level >= LoggerLevel.WARN
+    override fun isErrorEnabled(): Boolean = level >= LoggerLevel.ERROR
 
-    private fun log0(type: String, msg: String?, t: Throwable?) {
+    private fun log0(type: LoggerLevel, msg: String?, t: Throwable?) {
         val sout = System.out
         synchronized(sout) {
             sout
                 .append(D_FORMATTER.format(Instant.now().atZone(ZoneId.systemDefault())))
-                .append(" ").append(type).append(" ")
+                .append(" ").append(type.echoType).append(" ")
                 .println(msg)
             t?.printStackTrace(sout)
         }
@@ -49,30 +52,30 @@ object Slf4jStdoutLogger : MarkerIgnoringBase() {
 
     override fun debug(msg: String?, t: Throwable?) {
         if (!isDebugEnabled) return
-        log0("DEBUG", msg, t)
+        log0(LoggerLevel.DEBUG, msg, t)
     }
 
     override fun info(msg: String?, t: Throwable?) {
         if (!isInfoEnabled) return
-        log0("INFO ", msg, t)
+        log0(LoggerLevel.INFO, msg, t)
 
     }
 
     override fun warn(msg: String?, t: Throwable?) {
         if (!isWarnEnabled) return
-        log0("WARN ", msg, t)
+        log0(LoggerLevel.WARN, msg, t)
 
     }
 
     override fun error(msg: String?, t: Throwable?) {
         if (!isErrorEnabled) return
-        log0("ERROR", msg, t)
+        log0(LoggerLevel.ERROR, msg, t)
 
     }
 
     override fun trace(msg: String?, t: Throwable?) {
         if (!isTraceEnabled) return
-        log0("TRACE", msg, t)
+        log0(LoggerLevel.TRACE, msg, t)
     }
 
     override fun trace(msg: String?) {
