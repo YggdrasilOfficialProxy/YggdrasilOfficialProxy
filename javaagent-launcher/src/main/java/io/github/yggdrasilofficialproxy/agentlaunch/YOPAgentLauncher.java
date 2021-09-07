@@ -26,8 +26,9 @@ public class YOPAgentLauncher {
         URL sysRoot = new URL(null, "vmvs-yop-inm:///", handler);
         URLClassLoader uc = new URLClassLoader(new URL[]{sysRoot}, ClassLoader.getSystemClassLoader().getParent());
 
-        uc.loadClass("io.github.yggdrasilofficialproxy.YopBootstrap")
-                .getMethod("main", String[].class)
+        Object response = uc.loadClass("io.github.yggdrasilofficialproxy.YopBootstrap")
+                .getMethod("bootstrap", String[].class)
                 .invoke(null, (Object) new String[]{"daemon"});
+
     }
 }

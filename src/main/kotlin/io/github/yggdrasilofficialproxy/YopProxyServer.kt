@@ -319,6 +319,7 @@ class YopProxyServer(
     }
 
     fun startProxyServer(wait : Boolean) {
+        Slf4jStdoutLogger.debug { "Starting server....." }
         val server = embeddedServer(Netty, environment = setupYopEnvironment()) {
             this.shareWorkGroup = true
             this.configureBootstrap = {
