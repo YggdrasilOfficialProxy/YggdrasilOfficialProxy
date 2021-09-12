@@ -11,7 +11,7 @@ plugins {
 }
 
 jar {
-    from(project(':').tasks.standardShadowJar.outputs.files) {
+    from(project(':').tasks.shadowJar.outputs.files) {
         into 'yop-artifact'
         rename { 'yggdrasil-official-proxy.jar' }
     }
@@ -19,7 +19,10 @@ jar {
     //noinspection GroovyAssignabilityCheck
     manifest {
         attributes([
-                'Premain-Class': 'io.github.yggdrasilofficialproxy.agentlaunch.YOPAgentLauncher',
+                'Premain-Class'               : 'io.github.yggdrasilofficialproxy.agentlaunch.YOPAgentLauncher',
+                'Can-Set-Native-Method-Prefix': 'true',
+                'Can-Retransform-Classes'     : 'true',
+                'Can-Redefine-Classes'        : 'true'
         ])
     }
 }

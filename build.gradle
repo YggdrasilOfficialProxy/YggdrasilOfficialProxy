@@ -12,11 +12,8 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '7.0.0'
 }
 
-
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-
 group = "io.github.karlatemp"
-version = "2.3.0"
+version = "3.0.0"
 
 repositories {
     mavenLocal()
@@ -55,124 +52,14 @@ tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
     }
 }
 
-tasks.create("standardShadowJar", ShadowJar.class) { task ->
-    task.classifier("proxy")
-    task.dependsOn('classes')
-    task.exclude 'module-info.class'
-    task.exclude 'META-INF/**.SF'
-    task.exclude 'META-INF/**.RSA'
-    task.from(file('build/classes/kotlin/main'))
-    task.configurations = new ArrayList<>(
-            Arrays.asList(project.configurations.getByName("runtimeClasspath"))
-    )
-
-    manifest {
-        attributes([
-                'Premain-Class'               : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
-                'Main-Class'                  : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
-                'Can-Set-Native-Method-Prefix': 'true',
-                'Can-Retransform-Classes'     : 'true',
-                'Can-Redefine-Classes'        : 'true'
-        ])
-    }
-}
-tasks.create("shadowPaperclip", ShadowJar.class) { task ->
-    task.classifier("paperclip")
-    task.dependsOn('classes')
-    task.exclude 'module-info.class'
-    task.exclude 'META-INF/**.SF'
-    task.exclude 'META-INF/**.RSA'
-    from(configurations.shade.collect { it.isDirectory() ? it : zipTree(it) }) {
-        exclude 'META-INF', 'META-INF/**'
-    }
-    def relocateMap = { LinkedHashMap<String, String> args ->
-        args.entrySet().each {
-            task.relocate it.getKey(), 'io.github.karlatemp.yop.lib.' + it.getValue()
-        }
-    }
-    task.from(file('build/classes/kotlin/main'))
-    task.from(file('build/resources/main'))
-    task.configurations = new ArrayList<>(
-            Arrays.asList(project.configurations.getByName("runtimeClasspath"))
-    )
-    task.exclude 'META-INF/services/org.jline.terminal.spi.JnaSupport'
-    task.exclude 'META-INF/services/org.jline.terminal.spi.JansiSupport'
-    task.manifest {
-        attributes([
-                'Premain-Class'               : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
-                'Launcher-Agent-Class'        : 'io.github.karlatemp.yop.OpenLibrary',
-                'Main-Class'                  : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
-                'Can-Set-Native-Method-Prefix': 'true',
-                'Can-Retransform-Classes'     : 'true',
-                'Can-Redefine-Classes'        : 'true'
-        ])
-    }
-    task.dependencyFilter.exclude {
-        println(it)
-        it.moduleGroup == 'org.fusesource.jansi'
-    }
-    relocateMap([
-            'okio'                     : 'okio',
-            'okhttp3'                  : 'okhttp.okhttp3',
-            'ninja.leaping.configurate': 'org.spongepowered.ninja.leaping.configurate',
-            // kotlin.reflect.jvm.internal.KotlinReflectionInternalError: Unresolved class: class java.lang.String
-            //'io.ktor'                  : 'io.ktor',
-            //'kotlin'                   : 'kotlin',
-            //'kotlinx'                  : 'kotlin',
-            'org.checkerframework'     : 'org.checkerframework',
-            'org.eclipse.jetty.alpn'   : 'org.eclipse.jetty.alpn',
-            'com.typesafe'             : 'com.typesafe',
-            'com.google'               : 'com.google',
-            'org.slf4j'                : 'org.slf4j',
-            'io.netty'                 : 'io.netty',
-            'org.jline'                : 'org.jline'
-    ])
-}
-
 shadowJar {
-    classifier("minecraft")
+    classifier("server")
     manifest {
         attributes([
-                'Premain-Class'               : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
-                'Main-Class'                  : 'io.github.karlatemp.yop.YggdrasilOfficialProxy',
-                'Can-Set-Native-Method-Prefix': 'true',
-                'Can-Retransform-Classes'     : 'true',
-                'Can-Redefine-Classes'        : 'true'
+                'Main-Class': 'io.github.yggdrasilofficialproxy.YopBootstrap',
         ])
     }
     exclude 'module-info.class'
     exclude 'META-INF/**.SF'
     exclude 'META-INF/**.RSA'
-    def relocateMap = { LinkedHashMap<String, String> args ->
-        args.entrySet().each {
-            relocate it.getKey(), 'io.github.karlatemp.yop.lib.' + it.getValue()
-        }
-    }
-    def excl = [
-            'com.google.guava',
-            'io.netty',
-            'com.google.code.gson',
-            'org.slf4j',
-            'org.fusesource.jansi'
-    ]
-    dependencyFilter.exclude {
-        if (excl.contains(it.moduleGroup))
-            return true
-        return false
-    }
-    exclude 'META-INF/services/org.jline.terminal.spi.JnaSupport'
-    exclude 'META-INF/services/org.jline.terminal.spi.JansiSupport'
-    relocateMap([
-            'okio'                     : 'okio',
-            'okhttp3'                  : 'okhttp.okhttp3',
-            'ninja.leaping.configurate': 'org.spongepowered.ninja.leaping.configurate',
-            'io.ktor'                  : 'io.ktor',
-            // kotlin.reflect.jvm.internal.KotlinReflectionInternalError: Unresolved class: class java.lang.String
-            // 'kotlin'                   : 'kotlin.kotlin',
-            // 'kotlinx'                  : 'kotlin.kotlinx',
-            'org.checkerframework'     : 'org.checkerframework',
-            'org.eclipse.jetty.alpn'   : 'org.eclipse.jetty.alpn',
-            'com.typesafe'             : 'com.typesafe',
-            'org.jline'                : 'org.jline'
-    ])
 }
