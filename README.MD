@@ -191,3 +191,6 @@ location /api/ {
 }
 ```
 配置完成后将你的服务器 ip/域名 填入 `origin` 字段并将 `enable` 改成 `true` 即可
+
+# 交流群
+QQ Group: `832210691`
