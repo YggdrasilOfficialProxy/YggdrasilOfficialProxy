@@ -6,6 +6,12 @@
 - HttpClient powered by [Ktor](http://ktor.io/) 
   & [OkHttp](https://github.com/square/okhttp)
 
+
+> [!NOTE]
+>
+> YggdrasilOfficeProxy 已经弃用, 请考虑使用 https://github.com/YggdrasilGateway/YggdrasilGateway
+
+
 # Downloading
 首先, 你需要前往 releases 下载你所需要的对应版本.
 
